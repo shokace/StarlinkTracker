@@ -1,6 +1,10 @@
 import { Meteor } from "meteor/meteor";
 import { SatellitesCollection } from "/imports/api/satellites/satellites";
-import { STATUS_DOC_ID } from "/imports/api/satellites/constants";
+import {
+  CELESTRAK_BLOCK_COOLDOWN_MS,
+  CELESTRAK_MIN_REFRESH_INTERVAL_MS,
+  STATUS_DOC_ID,
+} from "/imports/api/satellites/constants";
 import { StatusCollection } from "/imports/api/status/status";
 import { FALLBACK_STARLINK_TLES } from "/imports/api/satellites/server/fallbackSeed";
 import { normalizeSatelliteRecord } from "/imports/api/satellites/server/normalizers";
@@ -19,9 +23,16 @@ function logError(message, error) {
 
 function getRefreshIntervalMs() {
   const configuredInterval = Number(process.env.ORBIT_REFRESH_INTERVAL_MS);
-  return Number.isFinite(configuredInterval) && configuredInterval > 0
-    ? configuredInterval
-    : null;
+
+  if (Number.isFinite(configuredInterval) && configuredInterval > 0) {
+    return Math.max(configuredInterval, CELESTRAK_MIN_REFRESH_INTERVAL_MS);
+  }
+
+  return CELESTRAK_MIN_REFRESH_INTERVAL_MS;
+}
+
+function isAccessBlockedError(error) {
+  return /\b403\b|forbidden/i.test(error?.message || "");
 }
 
 async function updateStatus(fields) {
@@ -90,7 +101,7 @@ async function buildCatalogFromFallback(fetchedAt) {
 
 async function fetchNormalizedCatalog(fetchedAt) {
   const feed = await fetchCelesTrakStarlinkCatalog({
-    timeoutMs: Number(process.env.ORBIT_FETCH_TIMEOUT_MS) || 15000,
+    timeoutMs: Number(process.env.ORBIT_FETCH_TIMEOUT_MS) || 30000,
   });
   const tleByNoradId = new Map(feed.tleRecords.map((record) => [record.noradId, record]));
   const source = {
@@ -141,6 +152,34 @@ export async function refreshStarlinkCatalog({ trigger = "manual" } = {}) {
   activeRefreshPromise = (async () => {
     const startedAt = new Date();
     const refreshIntervalMs = getRefreshIntervalMs();
+    const statusDoc = await StatusCollection.findOneAsync(STATUS_DOC_ID);
+    const refreshBlockedUntil = statusDoc?.refreshBlockedUntil
+      ? new Date(statusDoc.refreshBlockedUntil)
+      : null;
+
+    if (refreshBlockedUntil && refreshBlockedUntil > startedAt) {
+      const message = `CelesTrak is temporarily blocking refreshes. Using cached orbital data until ${refreshBlockedUntil.toLocaleString()}.`;
+
+      await updateStatus({
+        totalSatellites:
+          statusDoc?.totalSatellites ?? (await SatellitesCollection.find().countAsync()),
+        refreshInProgress: false,
+        refreshState: "blocked",
+        lastError: null,
+        lastWarning: message,
+        nextRefreshAt: refreshBlockedUntil,
+        lastTrigger: trigger,
+      });
+
+      return {
+        totalSatellites: statusDoc?.totalSatellites ?? 0,
+        blocked: true,
+        stale: true,
+        format: "cached",
+        nextRefreshAt: refreshBlockedUntil,
+        message,
+      };
+    }
 
     await updateStatus({
       refreshInProgress: true,
@@ -153,14 +192,50 @@ export async function refreshStarlinkCatalog({ trigger = "manual" } = {}) {
 
     try {
       let normalizedCatalog;
+      const existingCount = await SatellitesCollection.find().countAsync();
 
       try {
         normalizedCatalog = await fetchNormalizedCatalog(startedAt);
       } catch (error) {
-        const existingCount = await SatellitesCollection.find().countAsync();
-
         if (existingCount > 0) {
-          throw error;
+          const failedAt = new Date();
+          const durationMs = failedAt.getTime() - startedAt.getTime();
+          const blocked = isAccessBlockedError(error);
+          const refreshBlockedUntil = blocked
+            ? new Date(failedAt.getTime() + CELESTRAK_BLOCK_COOLDOWN_MS)
+            : null;
+          const warningMessage = blocked
+            ? `CelesTrak returned 403 Forbidden. Using cached orbital data until ${refreshBlockedUntil.toLocaleString()}.`
+            : "Feed timed out, continuing to use cached orbital data.";
+
+          await updateStatus({
+            totalSatellites: existingCount,
+            refreshInProgress: false,
+            refreshState: blocked ? "blocked" : "stale",
+            lastFailureAt: failedAt,
+            lastError: null,
+            lastWarning: warningMessage,
+            refreshBlockedUntil,
+            nextRefreshAt: refreshBlockedUntil ||
+              (refreshIntervalMs ? new Date(failedAt.getTime() + refreshIntervalMs) : null),
+          });
+
+          logError(
+            blocked
+              ? "Refresh blocked by CelesTrak, keeping existing orbital catalog"
+              : "Refresh timed out, keeping existing orbital catalog",
+            error,
+          );
+
+          return {
+            totalSatellites: existingCount,
+            durationMs,
+            stale: true,
+            format: "cached",
+            blocked,
+            nextRefreshAt: refreshBlockedUntil,
+            message: warningMessage,
+          };
         }
 
         logError("Primary feed unavailable, loading fallback sample catalog", error);
@@ -179,6 +254,8 @@ export async function refreshStarlinkCatalog({ trigger = "manual" } = {}) {
         lastRefreshAt: finishedAt,
         lastSuccessAt: finishedAt,
         lastError: null,
+        lastWarning: null,
+        refreshBlockedUntil: null,
         refreshInProgress: false,
         refreshState: "success",
         lastRefreshDurationMs: durationMs,
@@ -206,6 +283,8 @@ export async function refreshStarlinkCatalog({ trigger = "manual" } = {}) {
         refreshState: "failed",
         lastFailureAt: failedAt,
         lastError: error.message,
+        lastWarning: null,
+        refreshBlockedUntil: null,
       });
 
       logError("Starlink catalog refresh failed", error);

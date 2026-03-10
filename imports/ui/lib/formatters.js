@@ -36,7 +36,13 @@ export function formatDistanceToNowLabel(value) {
     return "never";
   }
 
-  const deltaMs = Date.now() - value.getTime();
+  const dateValue = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(dateValue.getTime())) {
+    return "never";
+  }
+
+  const deltaMs = Date.now() - dateValue.getTime();
   const deltaMinutes = Math.round(deltaMs / 60000);
 
   if (deltaMinutes < 1) {

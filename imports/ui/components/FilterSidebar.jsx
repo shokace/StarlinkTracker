@@ -116,9 +116,9 @@ export function FilterSidebar({
         </div>
 
         <p className="helper-text">
-          The server publishes only the current filter subset. Altitude filtering uses the latest
-          propagated altitude snapshot from the most recent ingestion run, while the globe renders
-          live client-side updates every second.
+          The server publishes only the current filter subset. Bulk globe points use the latest
+          refresh snapshot from MongoDB, and only the selected satellite gets extra local
+          propagation for the details view and orbit path.
         </p>
       </section>
 

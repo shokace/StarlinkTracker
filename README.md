@@ -193,10 +193,11 @@ npm test
 
 - `ORBIT_REFRESH_INTERVAL_MS`
   - optional server refresh cadence
-  - default: 6 hours
+  - default: 2 hours
+  - note: for CelesTrak GP feeds, values below 2 hours are clamped up to 2 hours to avoid provider blocks
 - `ORBIT_FETCH_TIMEOUT_MS`
   - optional feed timeout in milliseconds
-  - default: 15000
+  - default: 30000
 
 ## Performance Notes
 

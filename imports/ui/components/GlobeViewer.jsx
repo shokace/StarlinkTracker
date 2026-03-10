@@ -1,11 +1,15 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
+import {
+  GLOBE_ANIMATION_FPS,
+  LIVE_SAMPLE_REFRESH_INTERVAL_MS,
+} from "/imports/api/satellites/constants";
 
-function toCartesian(position) {
+function toCartesian(position, altitudeOffsetKm = 0) {
   return Cesium.Cartesian3.fromDegrees(
     position.longitudeDeg,
     position.latitudeDeg,
-    position.altitudeKm * 1000,
+    (position.altitudeKm + altitudeOffsetKm) * 1000,
   );
 }
 
@@ -13,6 +17,7 @@ export function GlobeViewer({
   satellites,
   positionsByNoradId,
   selectedNoradId,
+  selectedDisplayState,
   selectedOrbitPath,
   onSelectNoradId,
   loading,
@@ -21,12 +26,57 @@ export function GlobeViewer({
   const viewerRef = useRef(null);
   const dataSourceRef = useRef(null);
   const pathEntityRef = useRef(null);
-  const entityMapRef = useRef(new Map());
+  const pointCollectionRef = useRef(null);
+  const pointMapRef = useRef(new Map());
+  const pointStateMapRef = useRef(new Map());
+  const animationIntervalRef = useRef(null);
+  const markerRef = useRef(null);
+  const selectedCartesianRef = useRef(null);
+  const selectedNoradIdRef = useRef(selectedNoradId);
   const onSelectNoradIdRef = useRef(onSelectNoradId);
+
+  function updateSelectionMarker(viewer) {
+    const marker = markerRef.current;
+    const selectedCartesian = selectedCartesianRef.current;
+
+    if (!marker || !viewer || !selectedCartesian) {
+      if (marker) {
+        marker.style.display = "none";
+      }
+      return;
+    }
+
+    const occluder = new Cesium.EllipsoidalOccluder(
+      Cesium.Ellipsoid.WGS84,
+      viewer.camera.positionWC,
+    );
+
+    if (!occluder.isPointVisible(selectedCartesian)) {
+      marker.style.display = "none";
+      return;
+    }
+
+    const windowPosition = Cesium.SceneTransforms.worldToWindowCoordinates(
+      viewer.scene,
+      selectedCartesian,
+    );
+
+    if (!windowPosition) {
+      marker.style.display = "none";
+      return;
+    }
+
+    marker.style.display = "block";
+    marker.style.transform = `translate(${windowPosition.x}px, ${windowPosition.y}px)`;
+  }
 
   useEffect(() => {
     onSelectNoradIdRef.current = onSelectNoradId;
   }, [onSelectNoradId]);
+
+  useEffect(() => {
+    selectedNoradIdRef.current = selectedNoradId;
+  }, [selectedNoradId]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -59,7 +109,7 @@ export function GlobeViewer({
       viewer.scene.skyAtmosphere.show = true;
     }
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#030710");
-    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 8000000;
+    viewer.scene.screenSpaceCameraController.minimumZoomDistance = 10000;
     viewer.camera.setView({
       destination: Cesium.Cartesian3.fromDegrees(8, 18, 26000000),
     });
@@ -79,22 +129,69 @@ export function GlobeViewer({
 
     const dataSource = new Cesium.CustomDataSource("starlink-satellites");
     viewer.dataSources.add(dataSource);
+    const pointCollection = viewer.scene.primitives.add(new Cesium.PointPrimitiveCollection());
     dataSourceRef.current = dataSource;
+    pointCollectionRef.current = pointCollection;
     viewerRef.current = viewer;
 
-    const removeSelectionListener = viewer.selectedEntityChanged.addEventListener((entity) => {
-      const noradId = entity?.properties?.noradId?.getValue?.();
+    animationIntervalRef.current = window.setInterval(() => {
+      const pointMap = pointMapRef.current;
+      const pointStateMap = pointStateMapRef.current;
+      const frameTime = Date.now();
+      let didUpdate = false;
+
+      for (const [noradId, state] of pointStateMap.entries()) {
+        const point = pointMap.get(noradId);
+
+        if (!point) {
+          continue;
+        }
+
+        const transitionProgress = Math.min(
+          1,
+          (frameTime - state.transitionStartMs) / LIVE_SAMPLE_REFRESH_INTERVAL_MS,
+        );
+
+        Cesium.Cartesian3.lerp(state.from, state.to, transitionProgress, state.current);
+        point.position = state.current;
+        didUpdate = true;
+
+        if (selectedNoradIdRef.current === noradId) {
+          selectedCartesianRef.current = state.current;
+        }
+      }
+
+      if (didUpdate && !viewer.isDestroyed()) {
+        viewer.scene.requestRender();
+      }
+    }, Math.round(1000 / GLOBE_ANIMATION_FPS));
+
+    const handlePostRender = () => {
+      updateSelectionMarker(viewer);
+    };
+    viewer.scene.postRender.addEventListener(handlePostRender);
+
+    const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    clickHandler.setInputAction((movement) => {
+      const picked = viewer.scene.pick(movement.position);
+      const noradId = picked?.primitive?.id?.noradId;
 
       if (Number.isFinite(noradId)) {
         onSelectNoradIdRef.current?.(noradId);
       } else {
         onSelectNoradIdRef.current?.(null);
       }
-    });
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
     return () => {
-      removeSelectionListener();
-      entityMapRef.current.clear();
+      clickHandler.destroy();
+      viewer.scene.postRender.removeEventListener(handlePostRender);
+      pointMapRef.current.clear();
+      pointStateMapRef.current.clear();
+      if (animationIntervalRef.current) {
+        window.clearInterval(animationIntervalRef.current);
+        animationIntervalRef.current = null;
+      }
       if (!viewer.isDestroyed()) {
         viewer.destroy();
       }
@@ -110,13 +207,22 @@ export function GlobeViewer({
       return;
     }
 
-    const entityMap = entityMapRef.current;
+    const pointCollection = pointCollectionRef.current;
+    const pointMap = pointMapRef.current;
+    const pointStateMap = pointStateMapRef.current;
+    const updatedAtMs = Date.now();
+
+    if (!pointCollection) {
+      return;
+    }
+
     const visibleNoradIds = new Set(satellites.map((satellite) => satellite.noradId));
 
-    for (const [noradId, entity] of entityMap.entries()) {
+    for (const [noradId, point] of pointMap.entries()) {
       if (!visibleNoradIds.has(noradId)) {
-        dataSource.entities.remove(entity);
-        entityMap.delete(noradId);
+        pointCollection.remove(point);
+        pointMap.delete(noradId);
+        pointStateMap.delete(noradId);
       }
     }
 
@@ -127,35 +233,71 @@ export function GlobeViewer({
         return;
       }
 
-      let entity = entityMap.get(satellite.noradId);
+      let point = pointMap.get(satellite.noradId);
 
-      if (!entity) {
-        entity = dataSource.entities.add({
-          id: String(satellite.noradId),
-          name: satellite.name,
-          properties: {
+      if (!point) {
+        const initialPosition = toCartesian(liveState);
+        point = pointCollection.add({
+          id: {
             noradId: satellite.noradId,
+            name: satellite.name,
           },
-          point: new Cesium.PointGraphics({
-            pixelSize: 3,
-            color: Cesium.Color.fromCssColorString("#4dd2ff"),
-            outlineColor: Cesium.Color.fromCssColorString("#f7fbff"),
-            outlineWidth: 0.5,
-          }),
+          pixelSize: 3,
+          color: Cesium.Color.fromCssColorString("#4dd2ff"),
+          outlineColor: Cesium.Color.fromCssColorString("#f7fbff"),
+          outlineWidth: 0.5,
+          position: initialPosition,
         });
-
-        entityMap.set(satellite.noradId, entity);
+        pointMap.set(satellite.noradId, point);
+        pointStateMap.set(satellite.noradId, {
+          current: Cesium.Cartesian3.clone(initialPosition),
+          from: Cesium.Cartesian3.clone(initialPosition),
+          to: Cesium.Cartesian3.clone(initialPosition),
+          transitionStartMs: updatedAtMs,
+        });
       }
 
-      entity.position = toCartesian(liveState);
-      entity.point.color = selectedNoradId === satellite.noradId
-        ? Cesium.Color.fromCssColorString("#ffd166")
-        : Cesium.Color.fromCssColorString("#4dd2ff");
-      entity.point.pixelSize = selectedNoradId === satellite.noradId ? 6 : 3;
+      const targetPosition = toCartesian(liveState);
+      const pointState = pointStateMap.get(satellite.noradId);
+
+      if (!pointState) {
+        point.position = targetPosition;
+        pointStateMap.set(satellite.noradId, {
+          current: Cesium.Cartesian3.clone(targetPosition),
+          from: Cesium.Cartesian3.clone(targetPosition),
+          to: Cesium.Cartesian3.clone(targetPosition),
+          transitionStartMs: updatedAtMs,
+        });
+      } else {
+        Cesium.Cartesian3.clone(pointState.current, pointState.from);
+        Cesium.Cartesian3.clone(targetPosition, pointState.to);
+        pointState.transitionStartMs = updatedAtMs;
+      }
+
+      point.color = Cesium.Color.fromCssColorString("#4dd2ff");
+      point.pixelSize = 3;
     });
 
     viewer.scene.requestRender();
-  }, [satellites, positionsByNoradId, selectedNoradId]);
+  }, [satellites, positionsByNoradId]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+
+    if (!viewer) {
+      return;
+    }
+
+    if (selectedNoradId && selectedDisplayState) {
+      selectedCartesianRef.current =
+        pointStateMapRef.current.get(selectedNoradId)?.current || toCartesian(selectedDisplayState);
+    } else {
+      selectedCartesianRef.current = null;
+    }
+
+    updateSelectionMarker(viewer);
+    viewer.scene.requestRender();
+  }, [selectedNoradId, selectedDisplayState]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -189,6 +331,7 @@ export function GlobeViewer({
   return (
     <section className="globe-shell">
       <div ref={containerRef} className="globe-canvas" />
+      <div ref={markerRef} className="globe-selection-marker" aria-hidden="true" />
 
       <div className="globe-overlay">
         <div className="globe-overlay__chip">

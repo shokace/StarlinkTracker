@@ -5,6 +5,22 @@ const CELESTRAK_JSON_URL =
 const CELESTRAK_TLE_URL =
   "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle";
 
+function isTimeoutError(error) {
+  return (
+    error?.name === "TimeoutError" ||
+    error?.name === "AbortError" ||
+    /timeout/i.test(error?.message || "")
+  );
+}
+
+function formatFeedError(error) {
+  if (!error) {
+    return "unknown error";
+  }
+
+  return isTimeoutError(error) ? "request timed out" : error.message || "request failed";
+}
+
 async function fetchWithTimeout(url, timeoutMs) {
   const response = await fetch(url, {
     signal: AbortSignal.timeout(timeoutMs),
@@ -20,26 +36,33 @@ async function fetchWithTimeout(url, timeoutMs) {
   return response;
 }
 
-export async function fetchCelesTrakStarlinkCatalog({ timeoutMs = 15000 } = {}) {
-  let jsonRecords = [];
-  let format = "json";
-  let jsonError = null;
+export async function fetchCelesTrakStarlinkCatalog({ timeoutMs = 30000 } = {}) {
+  const [jsonResult, tleResult] = await Promise.allSettled([
+    fetchWithTimeout(CELESTRAK_JSON_URL, timeoutMs).then((response) => response.json()),
+    fetchWithTimeout(CELESTRAK_TLE_URL, timeoutMs)
+      .then((response) => response.text())
+      .then((tleText) => parseTleFeed(tleText)),
+  ]);
 
-  try {
-    const jsonResponse = await fetchWithTimeout(CELESTRAK_JSON_URL, timeoutMs);
-    jsonRecords = await jsonResponse.json();
-  } catch (error) {
-    jsonError = error;
-    format = "tle";
+  const jsonRecords = jsonResult.status === "fulfilled" && Array.isArray(jsonResult.value)
+    ? jsonResult.value
+    : [];
+  const tleRecords = tleResult.status === "fulfilled" ? tleResult.value : [];
+  const jsonError = jsonResult.status === "rejected" ? jsonResult.reason : null;
+  const tleError = tleResult.status === "rejected" ? tleResult.reason : null;
+
+  if (!jsonRecords.length && !tleRecords.length) {
+    throw new Error(
+      `Unable to fetch Starlink catalog. JSON: ${formatFeedError(jsonError)}. TLE: ${formatFeedError(tleError)}.`,
+    );
   }
 
-  const tleResponse = await fetchWithTimeout(CELESTRAK_TLE_URL, timeoutMs);
-  const tleText = await tleResponse.text();
-  const tleRecords = parseTleFeed(tleText);
+  const format = jsonRecords.length ? "json" : "tle";
 
   return {
     format,
     jsonError,
+    tleError,
     jsonRecords: Array.isArray(jsonRecords) ? jsonRecords : [],
     tleRecords,
     source: {

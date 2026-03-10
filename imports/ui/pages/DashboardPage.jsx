@@ -2,9 +2,12 @@ import { Meteor } from "meteor/meteor";
 import { useTracker } from "meteor/react-meteor-data";
 import { startTransition, useDeferredValue, useEffect, useState } from "react";
 import {
+  CLIENT_PROPAGATION_INTERVAL_MS,
   DEFAULT_ALTITUDE_MAX_KM,
   DEFAULT_ALTITUDE_MIN_KM,
   DEFAULT_MAX_VISIBLE,
+  SELECTED_ORBIT_PATH_SAMPLE_COUNT,
+  SELECTED_ORBIT_PATH_STEP_SECONDS,
 } from "/imports/api/satellites/constants";
 import { SatelliteCountsCollection } from "/imports/api/satellites/satelliteCounts";
 import { SatellitesCollection } from "/imports/api/satellites/satellites";
@@ -120,29 +123,30 @@ export function DashboardPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
   const deferredSearchText = useDeferredValue(filters.searchText);
-  const currentTime = useCurrentTime(1000);
+  const currentTime = useCurrentTime(CLIENT_PROPAGATION_INTERVAL_MS);
   const reactiveFilters = {
     ...filters,
     searchText: deferredSearchText,
   };
   const { favoriteNoradIds, satellites, selectedSatellite, matchingCount, status, loading } =
     useDashboardData(reactiveFilters, selectedNoradId);
-  const positionsByNoradId = new Map();
-
-  satellites.forEach((satellite) => {
-    const state = computeSatelliteState(satellite, currentTime);
-
-    if (state) {
-      positionsByNoradId.set(satellite.noradId, state);
-    }
-  });
+  const positionsByNoradId = new Map(
+    satellites
+      .filter((satellite) => satellite.liveSample)
+      .map((satellite) => [satellite.noradId, satellite.liveSample]),
+  );
 
   const selectedLiveState = selectedSatellite
-    ? positionsByNoradId.get(selectedSatellite.noradId) ||
-      computeSatelliteState(selectedSatellite, currentTime)
+    ? computeSatelliteState(selectedSatellite, currentTime) ||
+      positionsByNoradId.get(selectedSatellite.noradId)
     : null;
+  const selectedDisplayState = selectedNoradId ? positionsByNoradId.get(selectedNoradId) : null;
   const selectedOrbitPath = selectedSatellite
-    ? sampleOrbitPath(selectedSatellite, { startDate: currentTime, sampleCount: 36, stepSeconds: 180 })
+    ? sampleOrbitPath(selectedSatellite, {
+        startDate: currentTime,
+        sampleCount: SELECTED_ORBIT_PATH_SAMPLE_COUNT,
+        stepSeconds: SELECTED_ORBIT_PATH_STEP_SECONDS,
+      })
     : [];
 
   useEffect(() => {
@@ -213,6 +217,7 @@ export function DashboardPage() {
           satellites={satellites}
           positionsByNoradId={positionsByNoradId}
           selectedNoradId={selectedNoradId}
+          selectedDisplayState={selectedDisplayState}
           selectedOrbitPath={selectedOrbitPath}
           onSelectNoradId={handleSelectSatellite}
           loading={loading}
@@ -233,6 +238,12 @@ export function DashboardPage() {
         <div style={{ padding: "0 1rem 1rem", color: "var(--danger)" }}>
           {refreshError || status?.lastError}
         </div>
+      )}
+
+      {!refreshError &&
+        (status?.refreshState === "stale" || status?.refreshState === "blocked") &&
+        status?.lastWarning && (
+        <div style={{ padding: "0 1rem 1rem", color: "var(--warning)" }}>{status.lastWarning}</div>
       )}
     </div>
   );

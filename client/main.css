@@ -133,6 +133,10 @@ select:focus {
   color: var(--danger);
 }
 
+.status-pill--warn {
+  color: var(--warning);
+}
+
 .refresh-button,
 .ghost-button,
 .favorite-button {
@@ -325,6 +329,22 @@ select:focus {
 .globe-canvas {
   position: absolute;
   inset: 0;
+}
+
+.globe-selection-marker {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: none;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  border: 2px solid #ffd166;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px rgba(255, 247, 223, 0.7), 0 0 18px rgba(255, 209, 102, 0.35);
+  pointer-events: none;
+  z-index: 2;
 }
 
 .globe-overlay {

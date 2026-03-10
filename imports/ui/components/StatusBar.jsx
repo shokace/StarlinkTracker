@@ -21,7 +21,9 @@ export function StatusBar({ status, matchingCount, displayedCount }) {
         value={
           status?.refreshState === "failed"
             ? `Failed${status?.lastError ? `: ${status.lastError}` : ""}`
-            : status?.refreshState || "idle"
+            : status?.refreshState === "stale" || status?.refreshState === "blocked"
+              ? status?.lastWarning || "Using cached orbital data"
+              : status?.refreshState || "idle"
         }
       />
     </section>
