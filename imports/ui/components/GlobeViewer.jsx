@@ -22,6 +22,11 @@ export function GlobeViewer({
   const dataSourceRef = useRef(null);
   const pathEntityRef = useRef(null);
   const entityMapRef = useRef(new Map());
+  const onSelectNoradIdRef = useRef(onSelectNoradId);
+
+  useEffect(() => {
+    onSelectNoradIdRef.current = onSelectNoradId;
+  }, [onSelectNoradId]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -47,6 +52,9 @@ export function GlobeViewer({
     });
 
     viewer.scene.globe.enableLighting = true;
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0b1b30");
+    viewer.scene.globe.depthTestAgainstTerrain = true;
+    viewer.scene.globe.translucency.enabled = false;
     if (viewer.scene.skyAtmosphere) {
       viewer.scene.skyAtmosphere.show = true;
     }
@@ -78,17 +86,21 @@ export function GlobeViewer({
       const noradId = entity?.properties?.noradId?.getValue?.();
 
       if (Number.isFinite(noradId)) {
-        onSelectNoradId(noradId);
+        onSelectNoradIdRef.current?.(noradId);
+      } else {
+        onSelectNoradIdRef.current?.(null);
       }
     });
 
     return () => {
       removeSelectionListener();
       entityMapRef.current.clear();
-      viewer.destroy();
+      if (!viewer.isDestroyed()) {
+        viewer.destroy();
+      }
       viewerRef.current = null;
     };
-  }, [onSelectNoradId]);
+  }, []);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -125,11 +137,10 @@ export function GlobeViewer({
             noradId: satellite.noradId,
           },
           point: new Cesium.PointGraphics({
-            pixelSize: 7,
+            pixelSize: 3,
             color: Cesium.Color.fromCssColorString("#4dd2ff"),
             outlineColor: Cesium.Color.fromCssColorString("#f7fbff"),
-            outlineWidth: 1,
-            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+            outlineWidth: 0.5,
           }),
         });
 
@@ -140,7 +151,7 @@ export function GlobeViewer({
       entity.point.color = selectedNoradId === satellite.noradId
         ? Cesium.Color.fromCssColorString("#ffd166")
         : Cesium.Color.fromCssColorString("#4dd2ff");
-      entity.point.pixelSize = selectedNoradId === satellite.noradId ? 11 : 7;
+      entity.point.pixelSize = selectedNoradId === satellite.noradId ? 6 : 3;
     });
 
     viewer.scene.requestRender();

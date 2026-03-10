@@ -318,7 +318,7 @@ select:focus {
   border-radius: 28px;
   background:
     radial-gradient(circle at top, rgba(77, 210, 255, 0.12), transparent 32%),
-    rgba(2, 7, 16, 0.92);
+    #020710;
   box-shadow: var(--shadow);
 }
 

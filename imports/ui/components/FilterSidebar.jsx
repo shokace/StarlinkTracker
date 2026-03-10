@@ -62,9 +62,15 @@ export function FilterSidebar({
               value={filters.maxVisible}
               onChange={(event) => onFiltersChange({ maxVisible: Number(event.target.value) })}
             >
-              {[100, 250, 500, 750, 1000].map((value) => (
-                <option key={value} value={value}>
-                  {value} satellites
+              {[
+                { value: 250, label: "250 satellites" },
+                { value: 1000, label: "1,000 satellites" },
+                { value: 2500, label: "2,500 satellites" },
+                { value: 5000, label: "5,000 satellites" },
+                { value: 10000, label: "All satellites (~10k)" },
+              ].map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
