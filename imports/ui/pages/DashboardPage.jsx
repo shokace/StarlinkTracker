@@ -17,7 +17,6 @@ import { AppHeader } from "/imports/ui/components/AppHeader";
 import { FilterSidebar } from "/imports/ui/components/FilterSidebar";
 import { GlobeViewer } from "/imports/ui/components/GlobeViewer";
 import { SatelliteDetailsPanel } from "/imports/ui/components/SatelliteDetailsPanel";
-import { StatusBar } from "/imports/ui/components/StatusBar";
 import { useCurrentTime } from "/imports/ui/hooks/useCurrentTime";
 import {
   getFavoriteNoradIds,
@@ -120,8 +119,6 @@ function useDashboardData(filters, selectedNoradId) {
 export function DashboardPage() {
   const [filters, setFilters] = useState(initialFilters);
   const [selectedNoradId, setSelectedNoradId] = useState(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [refreshError, setRefreshError] = useState("");
   const deferredSearchText = useDeferredValue(filters.searchText);
   const currentTime = useCurrentTime(CLIENT_PROPAGATION_INTERVAL_MS);
   const reactiveFilters = {
@@ -155,19 +152,6 @@ export function DashboardPage() {
     }
   }, [loading, selectedNoradId, selectedSatellite]);
 
-  async function handleRefresh() {
-    setIsRefreshing(true);
-    setRefreshError("");
-
-    try {
-      await Meteor.callAsync("satellites.refreshNow");
-    } catch (error) {
-      setRefreshError(error.reason || error.message);
-    } finally {
-      setIsRefreshing(false);
-    }
-  }
-
   function handleFiltersChange(partialFilters) {
     startTransition(() => {
       setFilters((currentFilters) => ({
@@ -197,7 +181,7 @@ export function DashboardPage() {
 
   return (
     <div className="app-shell">
-      <AppHeader status={status} isRefreshing={isRefreshing} onRefresh={handleRefresh} />
+      <AppHeader status={status} />
 
       <main className="dashboard-grid">
         <FilterSidebar
@@ -232,17 +216,13 @@ export function DashboardPage() {
         />
       </main>
 
-      <StatusBar status={status} matchingCount={matchingCount} displayedCount={satellites.length} />
-
-      {(refreshError || status?.lastError) && (
+      {status?.lastError && (
         <div style={{ padding: "0 1rem 1rem", color: "var(--danger)" }}>
-          {refreshError || status?.lastError}
+          {status.lastError}
         </div>
       )}
 
-      {!refreshError &&
-        (status?.refreshState === "stale" || status?.refreshState === "blocked") &&
-        status?.lastWarning && (
+      {status?.refreshState === "stale" && status?.lastWarning && (
         <div style={{ padding: "0 1rem 1rem", color: "var(--warning)" }}>{status.lastWarning}</div>
       )}
     </div>

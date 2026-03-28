@@ -111,6 +111,8 @@ select:focus {
   display: flex;
   align-items: center;
   gap: 0.8rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .header-pill,
@@ -426,7 +428,7 @@ select:focus {
 
 .status-bar {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.8rem;
   padding: 0 1rem 1rem;
 }

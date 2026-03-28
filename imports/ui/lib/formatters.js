@@ -63,6 +63,36 @@ export function formatDistanceToNowLabel(value) {
   return `${deltaDays}d ago`;
 }
 
+export function formatCountdownLabel(value) {
+  if (!value) {
+    return "unscheduled";
+  }
+
+  const dateValue = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(dateValue.getTime())) {
+    return "unscheduled";
+  }
+
+  const remainingMs = dateValue.getTime() - Date.now();
+
+  if (remainingMs <= 0) {
+    return "due now";
+  }
+
+  const totalSeconds = Math.ceil(remainingMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (minutes >= 60) {
+    const hours = Math.floor(minutes / 60);
+    const remainderMinutes = minutes % 60;
+    return `${hours}h ${String(remainderMinutes).padStart(2, "0")}m`;
+  }
+
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
 export function formatNumberLabel(value, suffix = "", maximumFractionDigits = 2) {
   if (!Number.isFinite(value)) {
     return "—";

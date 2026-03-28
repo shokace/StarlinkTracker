@@ -3,7 +3,6 @@ import "/imports/api/satellites/server/publications";
 import "/imports/api/satellites/server/methods";
 import "/imports/api/status/server/publications";
 import {
-  CELESTRAK_MIN_REFRESH_INTERVAL_MS,
   DEFAULT_REFRESH_INTERVAL_MS,
   LIVE_SAMPLE_REFRESH_INTERVAL_MS,
   STATUS_DOC_ID,
@@ -46,11 +45,11 @@ Meteor.startup(async () => {
     });
   });
 
+  const configuredRefreshIntervalMs = Number(process.env.ORBIT_REFRESH_INTERVAL_MS);
   const refreshIntervalMs =
-    Math.max(
-      Number(process.env.ORBIT_REFRESH_INTERVAL_MS) || DEFAULT_REFRESH_INTERVAL_MS,
-      CELESTRAK_MIN_REFRESH_INTERVAL_MS,
-    );
+    Number.isFinite(configuredRefreshIntervalMs) && configuredRefreshIntervalMs > 0
+      ? configuredRefreshIntervalMs
+      : DEFAULT_REFRESH_INTERVAL_MS;
 
   Meteor.setInterval(() => {
     refreshStarlinkCatalog({ trigger: "scheduled" }).catch((error) => {

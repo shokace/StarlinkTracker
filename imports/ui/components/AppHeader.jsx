@@ -1,10 +1,12 @@
-import { formatDistanceToNowLabel } from "/imports/ui/lib/formatters";
+import { formatCountdownLabel, formatDistanceToNowLabel } from "/imports/ui/lib/formatters";
+import { useCurrentTime } from "/imports/ui/hooks/useCurrentTime";
 
-export function AppHeader({ status, isRefreshing, onRefresh }) {
+export function AppHeader({ status }) {
+  useCurrentTime(1000);
   const refreshStateClassName =
     status?.refreshState === "success"
       ? "status-pill status-pill--ok"
-      : status?.refreshState === "stale" || status?.refreshState === "blocked"
+      : status?.refreshState === "stale"
         ? "status-pill status-pill--warn"
       : status?.refreshState === "failed"
         ? "status-pill status-pill--error"
@@ -23,17 +25,12 @@ export function AppHeader({ status, isRefreshing, onRefresh }) {
 
       <div className="header-actions">
         <span className={refreshStateClassName}>
-          {status?.refreshState === "stale"
-            ? "cached"
-            : status?.refreshState === "blocked"
-              ? "source blocked"
-              : status?.refreshState || "idle"}
+          {status?.refreshState === "stale" ? "cached" : status?.refreshState || "idle"}
           {status?.lastSuccessAt ? ` • ${formatDistanceToNowLabel(status.lastSuccessAt)}` : ""}
         </span>
-
-        <button className="refresh-button" disabled={isRefreshing} onClick={onRefresh}>
-          {isRefreshing ? "Refreshing..." : "Refresh orbital data"}
-        </button>
+        <span className="header-pill">
+          Next sync {status?.refreshInProgress ? "• running" : `• ${formatCountdownLabel(status?.nextRefreshAt)}`}
+        </span>
       </div>
     </header>
   );

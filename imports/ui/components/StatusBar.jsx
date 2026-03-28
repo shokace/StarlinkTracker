@@ -1,4 +1,5 @@
-import { formatDateTimeLabel } from "/imports/ui/lib/formatters";
+import { formatCountdownLabel, formatDateTimeLabel } from "/imports/ui/lib/formatters";
+import { useCurrentTime } from "/imports/ui/hooks/useCurrentTime";
 
 function Tile({ label, value }) {
   return (
@@ -10,6 +11,8 @@ function Tile({ label, value }) {
 }
 
 export function StatusBar({ status, matchingCount, displayedCount }) {
+  useCurrentTime(1000);
+
   return (
     <section className="status-bar">
       <Tile label="Total in Mongo" value={status?.totalSatellites ?? 0} />
@@ -17,11 +20,15 @@ export function StatusBar({ status, matchingCount, displayedCount }) {
       <Tile label="Displayed on globe" value={displayedCount} />
       <Tile label="Last refresh" value={formatDateTimeLabel(status?.lastRefreshAt)} />
       <Tile
+        label="Next sync"
+        value={status?.refreshInProgress ? "Running now" : formatCountdownLabel(status?.nextRefreshAt)}
+      />
+      <Tile
         label="Refresh health"
         value={
           status?.refreshState === "failed"
             ? `Failed${status?.lastError ? `: ${status.lastError}` : ""}`
-            : status?.refreshState === "stale" || status?.refreshState === "blocked"
+            : status?.refreshState === "stale"
               ? status?.lastWarning || "Using cached orbital data"
               : status?.refreshState || "idle"
         }
