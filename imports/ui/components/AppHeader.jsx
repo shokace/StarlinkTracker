@@ -6,7 +6,7 @@ export function AppHeader({ status }) {
   const refreshStateClassName =
     status?.refreshState === "success"
       ? "status-pill status-pill--ok"
-      : status?.refreshState === "stale"
+      : status?.refreshState === "stale" || status?.refreshState === "blocked"
         ? "status-pill status-pill--warn"
       : status?.refreshState === "failed"
         ? "status-pill status-pill--error"
@@ -25,7 +25,11 @@ export function AppHeader({ status }) {
 
       <div className="header-actions">
         <span className={refreshStateClassName}>
-          {status?.refreshState === "stale" ? "cached" : status?.refreshState || "idle"}
+          {status?.refreshState === "stale"
+            ? "cached"
+            : status?.refreshState === "blocked"
+              ? "provider cooldown"
+              : status?.refreshState || "idle"}
           {status?.lastSuccessAt ? ` • ${formatDistanceToNowLabel(status.lastSuccessAt)}` : ""}
         </span>
         <span className="header-pill">

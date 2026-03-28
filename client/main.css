@@ -176,8 +176,8 @@ select:focus {
 
 .dashboard-grid {
   display: grid;
-  grid-template-columns: minmax(300px, 340px) 1fr minmax(320px, 360px);
-  gap: 1rem;
+  grid-template-columns: minmax(260px, 300px) 1fr minmax(280px, 320px);
+  gap: 0.8rem;
   padding: 1rem;
   min-height: 0;
 }
@@ -319,7 +319,7 @@ select:focus {
 .globe-shell {
   position: relative;
   overflow: hidden;
-  min-height: 72vh;
+  min-height: 80vh;
   border: 1px solid var(--border);
   border-radius: 28px;
   background:
@@ -467,7 +467,7 @@ select:focus {
 
 @media (max-width: 1300px) {
   .dashboard-grid {
-    grid-template-columns: minmax(280px, 320px) 1fr;
+    grid-template-columns: minmax(260px, 300px) 1fr;
   }
 
   .details-panel {
@@ -490,7 +490,7 @@ select:focus {
   }
 
   .globe-shell {
-    min-height: 55vh;
+    min-height: 60vh;
   }
 
   .field-grid--two,
