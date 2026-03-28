@@ -213,7 +213,6 @@ This keeps the initial experience responsive while still demonstrating a live co
 - Orbital positions are estimated from public element sets and can drift from actual spacecraft locations.
 - Server-side altitude filtering uses the most recent ingested propagated altitude snapshot, while the client globe updates positions continuously.
 - Favorites are local-only and stored in browser storage.
-- The current UI focuses on desktop / portfolio presentation rather than exhaustive operational tooling.
 
 ## Future Improvements
 
@@ -223,16 +222,3 @@ This keeps the initial experience responsive while still demonstrating a live co
 - Add orbital shell classification tuned to known Starlink shell definitions
 - Add entity clustering / instancing for even larger visible counts
 - Add richer test coverage for ingestion and publication filtering
-
-## Portfolio / Interview Talking Points
-
-This project demonstrates:
-
-- Meteor pub/sub design beyond autopublish
-- validated method and publication inputs
-- Mongo schema discipline with normalized records and derived fields
-- server-side external data ingestion and bulk upserts
-- reactive status reporting through a dedicated collection
-- client/server separation in an imports-based Meteor 3 codebase
-- Cesium integration inside a Meteor app
-- local orbital propagation with `satellite.js` rather than outsourcing computation
