@@ -18,8 +18,8 @@ export function AppHeader({ status }) {
         <span className="brand__eyebrow">Meteor 3 • Cesium • satellite.js</span>
         <h1 className="brand__title">Starlink Constellation Visualizer</h1>
         <p className="brand__subtitle">
-          Reactive pub/sub filters, Mongo-backed orbital catalog ingestion, and high-volume
-          constellation rendering from public orbital element sets.
+          Reactive pub/sub filters, orbital catalog ingestion, and high-volume constellation
+          rendering from public orbital element sets.
         </p>
       </div>
 

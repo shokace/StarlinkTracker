@@ -15,7 +15,7 @@ export function StatusBar({ status, matchingCount, displayedCount }) {
 
   return (
     <section className="status-bar">
-      <Tile label="Total in Mongo" value={status?.totalSatellites ?? 0} />
+      <Tile label="Catalog total" value={status?.totalSatellites ?? 0} />
       <Tile label="Matching filter" value={matchingCount} />
       <Tile label="Displayed on globe" value={displayedCount} />
       <Tile label="Last refresh" value={formatDateTimeLabel(status?.lastRefreshAt)} />

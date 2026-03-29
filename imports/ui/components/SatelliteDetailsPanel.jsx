@@ -22,7 +22,7 @@ export function SatelliteDetailsPanel({
         <h2>Satellite Details</h2>
         <div className="empty-state">
           Select a Starlink satellite from the globe or sidebar to inspect live propagated
-          coordinates and the normalized orbital record from MongoDB.
+          coordinates and the normalized orbital record.
         </div>
       </aside>
     );
