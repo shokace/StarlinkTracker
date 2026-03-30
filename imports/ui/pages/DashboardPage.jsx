@@ -17,6 +17,7 @@ import { AppHeader } from "/imports/ui/components/AppHeader";
 import { FilterSidebar } from "/imports/ui/components/FilterSidebar";
 import { GlobeViewer } from "/imports/ui/components/GlobeViewer";
 import { SatelliteDetailsPanel } from "/imports/ui/components/SatelliteDetailsPanel";
+import { useApproximateLocation } from "/imports/ui/hooks/useApproximateLocation";
 import { useCurrentTime } from "/imports/ui/hooks/useCurrentTime";
 import {
   getFavoriteNoradIds,
@@ -121,6 +122,7 @@ export function DashboardPage() {
   const [selectedNoradId, setSelectedNoradId] = useState(null);
   const deferredSearchText = useDeferredValue(filters.searchText);
   const currentTime = useCurrentTime(CLIENT_PROPAGATION_INTERVAL_MS);
+  const approximateLocation = useApproximateLocation();
   const reactiveFilters = {
     ...filters,
     searchText: deferredSearchText,
@@ -208,6 +210,10 @@ export function DashboardPage() {
           selectedNoradId={selectedNoradId}
           selectedDisplayState={selectedDisplayState}
           selectedOrbitPath={selectedOrbitPath}
+          approximateUserLocation={approximateLocation.location}
+          locationStatus={approximateLocation.status}
+          locationErrorMessage={approximateLocation.errorMessage}
+          onRequestLocation={approximateLocation.requestLocation}
           onSelectNoradId={handleSelectSatellite}
           loading={loading}
         />

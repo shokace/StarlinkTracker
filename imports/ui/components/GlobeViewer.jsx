@@ -13,6 +13,33 @@ function toCartesian(position, altitudeOffsetKm = 0) {
   );
 }
 
+function getApproximateUserCartesian(position, altitudeOffsetKm = 0) {
+  return Cesium.Cartesian3.fromDegrees(
+    position.longitudeDeg,
+    position.latitudeDeg,
+    altitudeOffsetKm * 1000,
+  );
+}
+
+function isAboveUserHorizon(userCartesian, satelliteCartesian, minimumElevationDeg = 40) {
+  const surfaceNormal = Cesium.Cartesian3.normalize(
+    userCartesian,
+    new Cesium.Cartesian3(),
+  );
+  const userToSatellite = Cesium.Cartesian3.subtract(
+    satelliteCartesian,
+    userCartesian,
+    new Cesium.Cartesian3(),
+  );
+  const normalizedLineOfSight = Cesium.Cartesian3.normalize(
+    userToSatellite,
+    new Cesium.Cartesian3(),
+  );
+  const minimumDot = Math.sin(Cesium.Math.toRadians(minimumElevationDeg));
+
+  return Cesium.Cartesian3.dot(normalizedLineOfSight, surfaceNormal) >= minimumDot;
+}
+
 function applyDefaultCameraView(viewer) {
   if (!viewer || viewer.isDestroyed()) {
     return;
@@ -29,12 +56,39 @@ function applyDefaultCameraView(viewer) {
   });
 }
 
+function updateAtmosphereForZoom(viewer) {
+  if (!viewer || viewer.isDestroyed()) {
+    return;
+  }
+
+  const cameraHeight = viewer.camera.positionCartographic?.height ?? 12000000;
+  const fade = Cesium.Math.clamp((cameraHeight - 9000000) / 18000000, 0, 1);
+
+  viewer.scene.globe.atmosphereHueShift = 0.0;
+  viewer.scene.globe.atmosphereSaturationShift = -1.0;
+  viewer.scene.globe.atmosphereBrightnessShift = Cesium.Math.lerp(-0.18, -0.3, fade);
+
+  if (viewer.scene.skyAtmosphere) {
+    viewer.scene.skyAtmosphere.hueShift = 0.0;
+    viewer.scene.skyAtmosphere.saturationShift = -1.0;
+    viewer.scene.skyAtmosphere.brightnessShift = Cesium.Math.lerp(-0.24, -0.38, fade);
+  }
+
+  viewer.scene.fog.enabled = true;
+  viewer.scene.fog.density = Cesium.Math.lerp(0.00004, 0.000008, fade);
+  viewer.scene.fog.minimumBrightness = Cesium.Math.lerp(0.16, 0.1, fade);
+}
+
 export function GlobeViewer({
   satellites,
   positionsByNoradId,
   selectedNoradId,
   selectedDisplayState,
   selectedOrbitPath,
+  approximateUserLocation,
+  locationStatus,
+  locationErrorMessage,
+  onRequestLocation,
   onSelectNoradId,
   loading,
 }) {
@@ -47,6 +101,8 @@ export function GlobeViewer({
   const pointStateMapRef = useRef(new Map());
   const animationIntervalRef = useRef(null);
   const markerRef = useRef(null);
+  const userVisibilityLineMapRef = useRef(new Map());
+  const userCartesianRef = useRef(null);
   const selectedCartesianRef = useRef(null);
   const selectedNoradIdRef = useRef(selectedNoradId);
   const onSelectNoradIdRef = useRef(onSelectNoradId);
@@ -118,23 +174,31 @@ export function GlobeViewer({
       shadows: false,
     });
 
-    viewer.scene.globe.enableLighting = true;
-    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#0b1b30");
+    viewer.scene.globe.enableLighting = false;
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString("#171a1f");
     viewer.scene.globe.depthTestAgainstTerrain = true;
+    viewer.scene.globe.showGroundAtmosphere = true;
     viewer.scene.globe.translucency.enabled = false;
     if (viewer.scene.skyAtmosphere) {
       viewer.scene.skyAtmosphere.show = true;
     }
-    viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#030710");
+    viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#111214");
     viewer.scene.screenSpaceCameraController.minimumZoomDistance = 10000;
     applyDefaultCameraView(viewer);
+    updateAtmosphereForZoom(viewer);
 
     void Cesium.TileMapServiceImageryProvider.fromUrl(
       Cesium.buildModuleUrl("Assets/Textures/NaturalEarthII"),
     ).then((imageryProvider) => {
       if (!viewer.isDestroyed()) {
-        viewer.imageryLayers.addImageryProvider(imageryProvider);
+        const imageryLayer = viewer.imageryLayers.addImageryProvider(imageryProvider);
+        imageryLayer.alpha = 0.95;
+        imageryLayer.brightness = 0.42;
+        imageryLayer.contrast = 1.45;
+        imageryLayer.gamma = 0.7;
+        imageryLayer.saturation = 0.0;
         applyDefaultCameraView(viewer);
+        updateAtmosphereForZoom(viewer);
         viewer.scene.requestRender();
       }
     });
@@ -177,12 +241,29 @@ export function GlobeViewer({
         }
       }
 
+      const userCartesian = userCartesianRef.current;
+
+      if (userCartesian) {
+        for (const [noradId, entity] of userVisibilityLineMapRef.current.entries()) {
+          const pointState = pointStateMap.get(noradId);
+
+          if (!pointState) {
+            entity.show = false;
+            continue;
+          }
+
+          entity.show = isAboveUserHorizon(userCartesian, pointState.current);
+          didUpdate = true;
+        }
+      }
+
       if (didUpdate && !viewer.isDestroyed()) {
         viewer.scene.requestRender();
       }
     }, Math.round(1000 / GLOBE_ANIMATION_FPS));
 
     const handlePostRender = () => {
+      updateAtmosphereForZoom(viewer);
       updateSelectionMarker(viewer);
     };
     viewer.scene.postRender.addEventListener(handlePostRender);
@@ -221,6 +302,7 @@ export function GlobeViewer({
       viewer.scene.postRender.removeEventListener(handlePostRender);
       pointMapRef.current.clear();
       pointStateMapRef.current.clear();
+      userVisibilityLineMapRef.current.clear();
       if (animationIntervalRef.current) {
         window.clearInterval(animationIntervalRef.current);
         animationIntervalRef.current = null;
@@ -279,10 +361,10 @@ export function GlobeViewer({
             noradId: satellite.noradId,
             name: satellite.name,
           },
-          pixelSize: 3,
-          color: Cesium.Color.fromCssColorString("#4dd2ff"),
-          outlineColor: Cesium.Color.fromCssColorString("#f7fbff"),
-          outlineWidth: 0.5,
+          pixelSize: 1,
+          color: Cesium.Color.fromCssColorString("#00a2ff"),
+          outlineColor: Cesium.Color.fromCssColorString("#00a2ff"),
+          outlineWidth: 0,
           position: initialPosition,
         });
         pointMap.set(satellite.noradId, point);
@@ -311,8 +393,8 @@ export function GlobeViewer({
         pointState.transitionStartMs = updatedAtMs;
       }
 
-      point.color = Cesium.Color.fromCssColorString("#4dd2ff");
-      point.pixelSize = 3;
+      point.color = Cesium.Color.fromCssColorString("#00a2ff");
+      point.pixelSize = 1;
     });
 
     viewer.scene.requestRender();
@@ -365,6 +447,96 @@ export function GlobeViewer({
     viewer.scene.requestRender();
   }, [selectedOrbitPath]);
 
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    const dataSource = dataSourceRef.current;
+
+    if (!viewer || !dataSource) {
+      return;
+    }
+
+    if (!approximateUserLocation) {
+      userCartesianRef.current = null;
+      viewer.scene.requestRender();
+      return;
+    }
+
+    userCartesianRef.current = getApproximateUserCartesian(approximateUserLocation, 0);
+    viewer.scene.requestRender();
+  }, [approximateUserLocation]);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    const dataSource = dataSourceRef.current;
+    const lineMap = userVisibilityLineMapRef.current;
+
+    if (!viewer || !dataSource) {
+      return;
+    }
+
+    if (!approximateUserLocation) {
+      for (const entity of lineMap.values()) {
+        dataSource.entities.remove(entity);
+      }
+      lineMap.clear();
+      viewer.scene.requestRender();
+      return;
+    }
+
+    const userCartesian = userCartesianRef.current || getApproximateUserCartesian(approximateUserLocation);
+    const visibleNoradIds = new Set();
+
+    satellites.forEach((satellite) => {
+      const liveState = positionsByNoradId.get(satellite.noradId);
+
+      if (!liveState) {
+        return;
+      }
+
+      const satelliteCartesian = toCartesian(liveState);
+
+      if (!isAboveUserHorizon(userCartesian, satelliteCartesian)) {
+        return;
+      }
+
+      visibleNoradIds.add(satellite.noradId);
+      const positions = [userCartesian, satelliteCartesian];
+      let entity = lineMap.get(satellite.noradId);
+
+      if (!entity) {
+        entity = dataSource.entities.add({
+          id: `user-visibility-line-${satellite.noradId}`,
+          polyline: {
+            positions: new Cesium.CallbackProperty(() => {
+              const latestUserCartesian = userCartesianRef.current;
+              const pointState = pointStateMapRef.current.get(satellite.noradId);
+
+              if (!latestUserCartesian || !pointState) {
+                return [userCartesian, satelliteCartesian];
+              }
+
+              return [latestUserCartesian, pointState.current];
+            }, false),
+            width: 1.5,
+            material: Cesium.Color.fromCssColorString("#ffffff").withAlpha(0.72),
+          },
+        });
+        lineMap.set(satellite.noradId, entity);
+      }
+
+      entity.show = true;
+    });
+
+    for (const [noradId, entity] of lineMap.entries()) {
+      if (!visibleNoradIds.has(noradId)) {
+        dataSource.entities.remove(entity);
+        lineMap.delete(noradId);
+      }
+    }
+
+    viewer.scene.requestRender();
+  }, [approximateUserLocation, positionsByNoradId, satellites]);
+
   return (
     <section className="globe-shell">
       <div ref={containerRef} className="globe-canvas" />
@@ -375,6 +547,38 @@ export function GlobeViewer({
           {loading ? "Loading subscription…" : `${satellites.length} satellites on globe`}
         </div>
       </div>
+
+      {(locationStatus === "prompt" ||
+        locationStatus === "requesting" ||
+        locationStatus === "denied" ||
+        locationStatus === "unsupported") && (
+        <div className="location-prompt">
+          <div>
+            <p className="location-prompt__title">Show your approximate location</p>
+            <p className="location-prompt__body">
+              Allow coarse browser geolocation and we will round it to your general area before
+              placing a green marker on the globe.
+            </p>
+            {locationErrorMessage && (
+              <p className="location-prompt__error">{locationErrorMessage}</p>
+            )}
+          </div>
+
+          <button
+            className="location-prompt__button"
+            onClick={onRequestLocation}
+            disabled={locationStatus === "requesting" || locationStatus === "unsupported"}
+          >
+            {locationStatus === "requesting"
+              ? "Requesting..."
+              : locationStatus === "denied"
+                ? "Try again"
+                : locationStatus === "unsupported"
+                  ? "Unavailable"
+                  : "Allow approximate location"}
+          </button>
+        </div>
+      )}
     </section>
   );
 }

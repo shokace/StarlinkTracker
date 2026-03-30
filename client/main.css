@@ -331,9 +331,7 @@ select:focus {
   height: 100%;
   border: 1px solid var(--border);
   border-radius: 28px;
-  background:
-    radial-gradient(circle at top, rgba(77, 210, 255, 0.12), transparent 32%),
-    #020710;
+  background: #020304;
   box-shadow: var(--shadow);
 }
 
@@ -393,6 +391,56 @@ select:focus {
   border-radius: 999px;
   background: rgba(5, 10, 20, 0.88);
   backdrop-filter: blur(12px);
+}
+
+.location-prompt {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: grid;
+  gap: 0.8rem;
+  max-width: 360px;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(6, 10, 18, 0.92);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+  z-index: 3;
+}
+
+.location-prompt__title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.location-prompt__body {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.location-prompt__error {
+  margin: 0.55rem 0 0;
+  color: var(--warning);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.location-prompt__button {
+  justify-self: start;
+  padding: 0.75rem 0.95rem;
+  color: #04120a;
+  background: linear-gradient(135deg, #27d768 0%, #6bf39c 100%);
+  box-shadow: 0 10px 28px rgba(39, 215, 104, 0.22);
+}
+
+.location-prompt__button:disabled {
+  cursor: default;
+  opacity: 0.65;
+  box-shadow: none;
 }
 
 .details-panel {
@@ -519,6 +567,12 @@ select:focus {
   .globe-shell {
     min-height: 65vh;
     height: 65vh;
+  }
+
+  .location-prompt {
+    left: 1rem;
+    right: 1rem;
+    max-width: none;
   }
 
   .field-grid--two,
