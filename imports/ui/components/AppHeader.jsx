@@ -1,16 +1,8 @@
-import { formatCountdownLabel, formatDistanceToNowLabel } from "/imports/ui/lib/formatters";
+import { formatCountdownLabel } from "/imports/ui/lib/formatters";
 import { useCurrentTime } from "/imports/ui/hooks/useCurrentTime";
 
 export function AppHeader({ status }) {
   useCurrentTime(1000);
-  const refreshStateClassName =
-    status?.refreshState === "success"
-      ? "status-pill status-pill--ok"
-      : status?.refreshState === "stale" || status?.refreshState === "blocked"
-        ? "status-pill status-pill--warn"
-      : status?.refreshState === "failed"
-        ? "status-pill status-pill--error"
-        : "status-pill";
 
   return (
     <header className="app-header">
@@ -24,14 +16,6 @@ export function AppHeader({ status }) {
       </div>
 
       <div className="header-actions">
-        <span className={refreshStateClassName}>
-          {status?.refreshState === "stale"
-            ? "cached"
-            : status?.refreshState === "blocked"
-              ? "provider cooldown"
-              : status?.refreshState || "idle"}
-          {status?.lastSuccessAt ? ` • ${formatDistanceToNowLabel(status.lastSuccessAt)}` : ""}
-        </span>
         <span className="header-pill">
           Next sync {status?.refreshInProgress ? "• running" : `• ${formatCountdownLabel(status?.nextRefreshAt)}`}
         </span>

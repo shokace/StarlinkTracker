@@ -65,32 +65,27 @@ export function formatDistanceToNowLabel(value) {
 
 export function formatCountdownLabel(value) {
   if (!value) {
-    return "unscheduled";
+    return "--:--:--";
   }
 
   const dateValue = value instanceof Date ? value : new Date(value);
 
   if (Number.isNaN(dateValue.getTime())) {
-    return "unscheduled";
+    return "--:--:--";
   }
 
   const remainingMs = dateValue.getTime() - Date.now();
 
   if (remainingMs <= 0) {
-    return "due now";
+    return "00:00:00";
   }
 
   const totalSeconds = Math.ceil(remainingMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
-  if (minutes >= 60) {
-    const hours = Math.floor(minutes / 60);
-    const remainderMinutes = minutes % 60;
-    return `${hours}h ${String(remainderMinutes).padStart(2, "0")}m`;
-  }
-
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 export function formatNumberLabel(value, suffix = "", maximumFractionDigits = 2) {

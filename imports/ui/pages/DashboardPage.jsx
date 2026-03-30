@@ -127,15 +127,20 @@ export function DashboardPage() {
   };
   const { favoriteNoradIds, satellites, selectedSatellite, matchingCount, status, loading } =
     useDashboardData(reactiveFilters, selectedNoradId);
-  const positionsByNoradId = new Map(
-    satellites
-      .filter((satellite) => satellite.liveSample)
-      .map((satellite) => [satellite.noradId, satellite.liveSample]),
-  );
+  const positionsByNoradId = new Map();
+
+  satellites.forEach((satellite) => {
+    const propagatedState = computeSatelliteState(satellite, currentTime) || satellite.liveSample;
+
+    if (propagatedState) {
+      positionsByNoradId.set(satellite.noradId, propagatedState);
+    }
+  });
 
   const selectedLiveState = selectedSatellite
-    ? computeSatelliteState(selectedSatellite, currentTime) ||
-      positionsByNoradId.get(selectedSatellite.noradId)
+    ? positionsByNoradId.get(selectedSatellite.noradId) ||
+      computeSatelliteState(selectedSatellite, currentTime) ||
+      selectedSatellite.liveSample
     : null;
   const selectedDisplayState = selectedNoradId ? positionsByNoradId.get(selectedNoradId) : null;
   const selectedOrbitPath = selectedSatellite

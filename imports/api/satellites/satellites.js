@@ -6,6 +6,12 @@ export const SATELLITE_PUBLIC_FIELDS = {
   _id: 1,
   name: 1,
   noradId: 1,
+  epoch: 1,
+  updatedAt: 1,
+  tleLine1: 1,
+  tleLine2: 1,
+  omm: 1,
+  orbit: 1,
   liveSample: 1,
 };
 

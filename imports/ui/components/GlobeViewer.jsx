@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import {
+  CLIENT_PROPAGATION_INTERVAL_MS,
   GLOBE_ANIMATION_FPS,
-  LIVE_SAMPLE_REFRESH_INTERVAL_MS,
 } from "/imports/api/satellites/constants";
 
 function toCartesian(position, altitudeOffsetKm = 0) {
@@ -11,6 +11,22 @@ function toCartesian(position, altitudeOffsetKm = 0) {
     position.latitudeDeg,
     (position.altitudeKm + altitudeOffsetKm) * 1000,
   );
+}
+
+function applyDefaultCameraView(viewer) {
+  if (!viewer || viewer.isDestroyed()) {
+    return;
+  }
+
+  viewer.camera.frustum.fov = Cesium.Math.toRadians(50);
+  viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(8, 18, 12000000),
+    orientation: {
+      heading: 0,
+      pitch: -Cesium.Math.PI_OVER_TWO,
+      roll: 0,
+    },
+  });
 }
 
 export function GlobeViewer({
@@ -34,6 +50,7 @@ export function GlobeViewer({
   const selectedCartesianRef = useRef(null);
   const selectedNoradIdRef = useRef(selectedNoradId);
   const onSelectNoradIdRef = useRef(onSelectNoradId);
+  const resizeObserverRef = useRef(null);
 
   function updateSelectionMarker(viewer) {
     const marker = markerRef.current;
@@ -110,15 +127,14 @@ export function GlobeViewer({
     }
     viewer.scene.backgroundColor = Cesium.Color.fromCssColorString("#030710");
     viewer.scene.screenSpaceCameraController.minimumZoomDistance = 10000;
-    viewer.camera.setView({
-      destination: Cesium.Cartesian3.fromDegrees(8, 18, 26000000),
-    });
+    applyDefaultCameraView(viewer);
 
     void Cesium.TileMapServiceImageryProvider.fromUrl(
       Cesium.buildModuleUrl("Assets/Textures/NaturalEarthII"),
     ).then((imageryProvider) => {
       if (!viewer.isDestroyed()) {
         viewer.imageryLayers.addImageryProvider(imageryProvider);
+        applyDefaultCameraView(viewer);
         viewer.scene.requestRender();
       }
     });
@@ -149,7 +165,7 @@ export function GlobeViewer({
 
         const transitionProgress = Math.min(
           1,
-          (frameTime - state.transitionStartMs) / LIVE_SAMPLE_REFRESH_INTERVAL_MS,
+          (frameTime - state.transitionStartMs) / CLIENT_PROPAGATION_INTERVAL_MS,
         );
 
         Cesium.Cartesian3.lerp(state.from, state.to, transitionProgress, state.current);
@@ -171,6 +187,23 @@ export function GlobeViewer({
     };
     viewer.scene.postRender.addEventListener(handlePostRender);
 
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserverRef.current = new ResizeObserver(() => {
+        if (viewer.isDestroyed()) {
+          return;
+        }
+
+        if (typeof viewer.forceResize === "function") {
+          viewer.forceResize();
+        } else if (typeof viewer.resize === "function") {
+          viewer.resize();
+        }
+
+        viewer.scene.requestRender();
+      });
+      resizeObserverRef.current.observe(containerRef.current);
+    }
+
     const clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     clickHandler.setInputAction((movement) => {
       const picked = viewer.scene.pick(movement.position);
@@ -191,6 +224,10 @@ export function GlobeViewer({
       if (animationIntervalRef.current) {
         window.clearInterval(animationIntervalRef.current);
         animationIntervalRef.current = null;
+      }
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+        resizeObserverRef.current = null;
       }
       if (!viewer.isDestroyed()) {
         viewer.destroy();
@@ -336,9 +373,6 @@ export function GlobeViewer({
       <div className="globe-overlay">
         <div className="globe-overlay__chip">
           {loading ? "Loading subscription…" : `${satellites.length} satellites on globe`}
-        </div>
-        <div className="globe-overlay__chip">
-          Click a point to inspect live propagated position and orbital metadata.
         </div>
       </div>
     </section>
