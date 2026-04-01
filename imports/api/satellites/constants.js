@@ -1,5 +1,5 @@
-export const DEFAULT_MAX_VISIBLE = 10000;
-export const MAX_VISIBLE_HARD_LIMIT = 15000;
+export const DEFAULT_MAX_VISIBLE = null;
+export const MAX_VISIBLE_HARD_LIMIT = null;
 export const DEFAULT_ALTITUDE_MIN_KM = 300;
 export const DEFAULT_ALTITUDE_MAX_KM = 700;
 export const STATUS_DOC_ID = "starlink-feed";
@@ -12,3 +12,6 @@ export const LIVE_SAMPLE_BATCH_SIZE = 500;
 export const GLOBE_ANIMATION_FPS = 25;
 export const SELECTED_ORBIT_PATH_SAMPLE_COUNT = 18;
 export const SELECTED_ORBIT_PATH_STEP_SECONDS = 300;
+export const FORECAST_HORIZON_MS = 1000 * 60 * 60 * 24;
+export const FORECAST_PLAYBACK_RATE = 360;
+export const FORECAST_PLAYBACK_TICK_MS = 250;

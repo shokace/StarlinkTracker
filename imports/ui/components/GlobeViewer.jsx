@@ -1,9 +1,9 @@
 import { useEffect, useRef } from "react";
 import * as Cesium from "cesium";
 import {
-  CLIENT_PROPAGATION_INTERVAL_MS,
   GLOBE_ANIMATION_FPS,
 } from "/imports/api/satellites/constants";
+import { ForecastControls } from "/imports/ui/components/ForecastControls";
 
 function toCartesian(position, altitudeOffsetKm = 0) {
   return Cesium.Cartesian3.fromDegrees(
@@ -82,6 +82,12 @@ function updateAtmosphereForZoom(viewer) {
 export function GlobeViewer({
   satellites,
   positionsByNoradId,
+  displayTime,
+  isForecastMode,
+  isForecastPlaying,
+  forecastOffsetMs,
+  forecastHorizonMs,
+  positionTransitionMs,
   selectedNoradId,
   selectedDisplayState,
   selectedOrbitPath,
@@ -89,6 +95,10 @@ export function GlobeViewer({
   locationStatus,
   locationErrorMessage,
   onRequestLocation,
+  onEnterForecastMode,
+  onReturnLiveMode,
+  onToggleForecastPlayback,
+  onForecastSeek,
   onSelectNoradId,
   loading,
 }) {
@@ -106,6 +116,8 @@ export function GlobeViewer({
   const selectedCartesianRef = useRef(null);
   const selectedNoradIdRef = useRef(selectedNoradId);
   const onSelectNoradIdRef = useRef(onSelectNoradId);
+  const isForecastModeRef = useRef(isForecastMode);
+  const positionTransitionMsRef = useRef(positionTransitionMs);
   const resizeObserverRef = useRef(null);
 
   function updateSelectionMarker(viewer) {
@@ -150,6 +162,14 @@ export function GlobeViewer({
   useEffect(() => {
     selectedNoradIdRef.current = selectedNoradId;
   }, [selectedNoradId]);
+
+  useEffect(() => {
+    isForecastModeRef.current = isForecastMode;
+  }, [isForecastMode]);
+
+  useEffect(() => {
+    positionTransitionMsRef.current = positionTransitionMs;
+  }, [positionTransitionMs]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -227,12 +247,17 @@ export function GlobeViewer({
           continue;
         }
 
-        const transitionProgress = Math.min(
-          1,
-          (frameTime - state.transitionStartMs) / CLIENT_PROPAGATION_INTERVAL_MS,
-        );
+        if (isForecastModeRef.current) {
+          Cesium.Cartesian3.clone(state.to, state.current);
+        } else {
+          const transitionProgress = Math.min(
+            1,
+            (frameTime - state.transitionStartMs) /
+              Math.max(positionTransitionMsRef.current, 1),
+          );
 
-        Cesium.Cartesian3.lerp(state.from, state.to, transitionProgress, state.current);
+          Cesium.Cartesian3.lerp(state.from, state.to, transitionProgress, state.current);
+        }
         point.position = state.current;
         didUpdate = true;
 
@@ -363,8 +388,8 @@ export function GlobeViewer({
           },
           pixelSize: 1,
           color: Cesium.Color.fromCssColorString("#00a2ff"),
-          outlineColor: Cesium.Color.fromCssColorString("#00a2ff"),
-          outlineWidth: 0,
+          outlineColor: Cesium.Color.fromCssColorString("#7fd8ff"),
+          outlineWidth: 0.5,
           position: initialPosition,
         });
         pointMap.set(satellite.noradId, point);
@@ -388,17 +413,25 @@ export function GlobeViewer({
           transitionStartMs: updatedAtMs,
         });
       } else {
-        Cesium.Cartesian3.clone(pointState.current, pointState.from);
+        if (isForecastMode) {
+          Cesium.Cartesian3.clone(targetPosition, pointState.current);
+          Cesium.Cartesian3.clone(targetPosition, pointState.from);
+        } else {
+          Cesium.Cartesian3.clone(pointState.current, pointState.from);
+        }
         Cesium.Cartesian3.clone(targetPosition, pointState.to);
         pointState.transitionStartMs = updatedAtMs;
+        point.position = pointState.current;
       }
 
       point.color = Cesium.Color.fromCssColorString("#00a2ff");
+      point.outlineColor = Cesium.Color.fromCssColorString("#7fd8ff");
+      point.outlineWidth = 0.5;
       point.pixelSize = 1;
     });
 
     viewer.scene.requestRender();
-  }, [satellites, positionsByNoradId]);
+  }, [isForecastMode, satellites, positionsByNoradId]);
 
   useEffect(() => {
     const viewer = viewerRef.current;
@@ -547,6 +580,18 @@ export function GlobeViewer({
           {loading ? "Loading subscription…" : `${satellites.length} satellites on globe`}
         </div>
       </div>
+
+      <ForecastControls
+        isForecastMode={isForecastMode}
+        isPlaying={isForecastPlaying}
+        forecastOffsetMs={forecastOffsetMs}
+        forecastHorizonMs={forecastHorizonMs}
+        displayTime={displayTime}
+        onEnterForecastMode={onEnterForecastMode}
+        onReturnLive={onReturnLiveMode}
+        onTogglePlay={onToggleForecastPlayback}
+        onSeek={onForecastSeek}
+      />
 
       {(locationStatus === "prompt" ||
         locationStatus === "requesting" ||

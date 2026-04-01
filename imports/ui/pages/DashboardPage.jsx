@@ -6,6 +6,9 @@ import {
   DEFAULT_ALTITUDE_MAX_KM,
   DEFAULT_ALTITUDE_MIN_KM,
   DEFAULT_MAX_VISIBLE,
+  FORECAST_HORIZON_MS,
+  FORECAST_PLAYBACK_RATE,
+  FORECAST_PLAYBACK_TICK_MS,
   SELECTED_ORBIT_PATH_SAMPLE_COUNT,
   SELECTED_ORBIT_PATH_STEP_SECONDS,
 } from "/imports/api/satellites/constants";
@@ -88,7 +91,7 @@ function useDashboardData(filters, selectedNoradId) {
     )
       .fetch()
       .filter((satellite) => matchesLocalFilter(satellite, filters, favoriteNoradIds))
-      .slice(0, filters.maxVisible);
+      .slice(0, Number.isFinite(filters.maxVisible) ? filters.maxVisible : undefined);
     const selectedSatellite = selectedNoradId
       ? SatellitesCollection.findOne({ noradId: selectedNoradId })
       : null;
@@ -120,6 +123,12 @@ function useDashboardData(filters, selectedNoradId) {
 export function DashboardPage() {
   const [filters, setFilters] = useState(initialFilters);
   const [selectedNoradId, setSelectedNoradId] = useState(null);
+  const [forecastState, setForecastState] = useState({
+    isOpen: false,
+    isPlaying: false,
+    offsetMs: 0,
+    anchorTime: null,
+  });
   const deferredSearchText = useDeferredValue(filters.searchText);
   const currentTime = useCurrentTime(CLIENT_PROPAGATION_INTERVAL_MS);
   const approximateLocation = useApproximateLocation();
@@ -129,10 +138,18 @@ export function DashboardPage() {
   };
   const { favoriteNoradIds, satellites, selectedSatellite, matchingCount, status, loading } =
     useDashboardData(reactiveFilters, selectedNoradId);
+  const displayTime =
+    forecastState.isOpen && forecastState.anchorTime
+      ? new Date(forecastState.anchorTime.getTime() + forecastState.offsetMs)
+      : currentTime;
+  const positionTransitionMs =
+    forecastState.isOpen && forecastState.isPlaying
+      ? FORECAST_PLAYBACK_TICK_MS
+      : CLIENT_PROPAGATION_INTERVAL_MS;
   const positionsByNoradId = new Map();
 
   satellites.forEach((satellite) => {
-    const propagatedState = computeSatelliteState(satellite, currentTime) || satellite.liveSample;
+    const propagatedState = computeSatelliteState(satellite, displayTime) || satellite.liveSample;
 
     if (propagatedState) {
       positionsByNoradId.set(satellite.noradId, propagatedState);
@@ -141,13 +158,13 @@ export function DashboardPage() {
 
   const selectedLiveState = selectedSatellite
     ? positionsByNoradId.get(selectedSatellite.noradId) ||
-      computeSatelliteState(selectedSatellite, currentTime) ||
+      computeSatelliteState(selectedSatellite, displayTime) ||
       selectedSatellite.liveSample
     : null;
   const selectedDisplayState = selectedNoradId ? positionsByNoradId.get(selectedNoradId) : null;
   const selectedOrbitPath = selectedSatellite
     ? sampleOrbitPath(selectedSatellite, {
-        startDate: currentTime,
+        startDate: displayTime,
         sampleCount: SELECTED_ORBIT_PATH_SAMPLE_COUNT,
         stepSeconds: SELECTED_ORBIT_PATH_STEP_SECONDS,
       })
@@ -158,6 +175,39 @@ export function DashboardPage() {
       setSelectedNoradId(null);
     }
   }, [loading, selectedNoradId, selectedSatellite]);
+
+  useEffect(() => {
+    if (!forecastState.isOpen || !forecastState.isPlaying) {
+      return undefined;
+    }
+
+    const intervalId = window.setInterval(() => {
+      setForecastState((currentForecastState) => {
+        if (!currentForecastState.isOpen || !currentForecastState.isPlaying) {
+          return currentForecastState;
+        }
+
+        const nextOffsetMs =
+          currentForecastState.offsetMs + FORECAST_PLAYBACK_TICK_MS * FORECAST_PLAYBACK_RATE;
+
+        if (nextOffsetMs >= FORECAST_HORIZON_MS) {
+          return {
+            isOpen: false,
+            isPlaying: false,
+            offsetMs: 0,
+            anchorTime: null,
+          };
+        }
+
+        return {
+          ...currentForecastState,
+          offsetMs: nextOffsetMs,
+        };
+      });
+    }, FORECAST_PLAYBACK_TICK_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [forecastState.isOpen, forecastState.isPlaying]);
 
   function handleFiltersChange(partialFilters) {
     startTransition(() => {
@@ -186,6 +236,42 @@ export function DashboardPage() {
     });
   }
 
+  function handleEnterForecastMode() {
+    setForecastState({
+      isOpen: true,
+      isPlaying: false,
+      offsetMs: 0,
+      anchorTime: new Date(currentTime),
+    });
+  }
+
+  function handleReturnLiveMode() {
+    setForecastState({
+      isOpen: false,
+      isPlaying: false,
+      offsetMs: 0,
+      anchorTime: null,
+    });
+  }
+
+  function handleToggleForecastPlayback() {
+    setForecastState((currentForecastState) => ({
+      isOpen: true,
+      isPlaying: !currentForecastState.isPlaying,
+      offsetMs: currentForecastState.offsetMs,
+      anchorTime: currentForecastState.anchorTime || new Date(currentTime),
+    }));
+  }
+
+  function handleForecastSeek(offsetMs) {
+    setForecastState((currentForecastState) => ({
+      isOpen: true,
+      isPlaying: false,
+      offsetMs,
+      anchorTime: currentForecastState.anchorTime || new Date(currentTime),
+    }));
+  }
+
   return (
     <div className="app-shell">
       <AppHeader status={status} />
@@ -207,6 +293,12 @@ export function DashboardPage() {
         <GlobeViewer
           satellites={satellites}
           positionsByNoradId={positionsByNoradId}
+          displayTime={displayTime}
+          isForecastMode={forecastState.isOpen}
+          isForecastPlaying={forecastState.isPlaying}
+          forecastOffsetMs={forecastState.offsetMs}
+          forecastHorizonMs={FORECAST_HORIZON_MS}
+          positionTransitionMs={positionTransitionMs}
           selectedNoradId={selectedNoradId}
           selectedDisplayState={selectedDisplayState}
           selectedOrbitPath={selectedOrbitPath}
@@ -214,6 +306,10 @@ export function DashboardPage() {
           locationStatus={approximateLocation.status}
           locationErrorMessage={approximateLocation.errorMessage}
           onRequestLocation={approximateLocation.requestLocation}
+          onEnterForecastMode={handleEnterForecastMode}
+          onReturnLiveMode={handleReturnLiveMode}
+          onToggleForecastPlayback={handleToggleForecastPlayback}
+          onForecastSeek={handleForecastSeek}
           onSelectNoradId={handleSelectSatellite}
           loading={loading}
         />

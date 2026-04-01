@@ -24,7 +24,7 @@ export function sanitizeFilters(rawFilters = {}) {
       altitudeMaxKm: Match.Maybe(Number),
       favoritesOnly: Match.Maybe(Boolean),
       favoriteNoradIds: Match.Maybe([Match.Integer]),
-      maxVisible: Match.Maybe(Match.Integer),
+      maxVisible: Match.Maybe(Match.OneOf(null, Match.Integer)),
     }),
   );
 
@@ -44,8 +44,17 @@ export function sanitizeFilters(rawFilters = {}) {
     3000,
   );
   const favoriteNoradIds = Array.isArray(rawFilters.favoriteNoradIds)
-    ? [...new Set(rawFilters.favoriteNoradIds)].slice(0, MAX_VISIBLE_HARD_LIMIT)
+    ? [...new Set(rawFilters.favoriteNoradIds)]
     : [];
+  const rawMaxVisible =
+    rawFilters.maxVisible === null || rawFilters.maxVisible === undefined
+      ? DEFAULT_MAX_VISIBLE
+      : rawFilters.maxVisible;
+  const maxVisible = Number.isFinite(rawMaxVisible)
+    ? MAX_VISIBLE_HARD_LIMIT
+      ? clamp(rawMaxVisible, 25, MAX_VISIBLE_HARD_LIMIT)
+      : Math.max(25, rawMaxVisible)
+    : null;
 
   return {
     searchText,
@@ -53,10 +62,6 @@ export function sanitizeFilters(rawFilters = {}) {
     altitudeMaxKm,
     favoritesOnly: Boolean(rawFilters.favoritesOnly),
     favoriteNoradIds,
-    maxVisible: clamp(
-      Number.isFinite(rawFilters.maxVisible) ? rawFilters.maxVisible : DEFAULT_MAX_VISIBLE,
-      25,
-      MAX_VISIBLE_HARD_LIMIT,
-    ),
+    maxVisible,
   };
 }

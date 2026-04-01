@@ -393,6 +393,81 @@ select:focus {
   backdrop-filter: blur(12px);
 }
 
+.forecast-controls {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  min-width: 320px;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(6, 10, 18, 0.92);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
+  z-index: 3;
+}
+
+.forecast-controls--collapsed {
+  min-width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.forecast-controls__row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.forecast-live-button,
+.forecast-play-button {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  background: rgba(10, 16, 28, 0.94);
+}
+
+.forecast-live-button {
+  color: #02120f;
+  background: linear-gradient(135deg, #4dcfff 0%, #77e9ff 100%);
+}
+
+.forecast-meta {
+  display: grid;
+  min-width: 0;
+}
+
+.forecast-meta__offset {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.forecast-meta__time {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.forecast-slider {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.forecast-scale {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .location-prompt {
   position: absolute;
   right: 1rem;
@@ -567,6 +642,12 @@ select:focus {
   .globe-shell {
     min-height: 65vh;
     height: 65vh;
+  }
+
+  .forecast-controls {
+    left: 1rem;
+    right: 1rem;
+    min-width: 0;
   }
 
   .location-prompt {
