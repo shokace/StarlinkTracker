@@ -1,0 +1,14 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: starlinktracker-app
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      ROOT_URL: http://localhost:3000
+      ORBIT_REFRESH_INTERVAL_MS: ${ORBIT_REFRESH_INTERVAL_MS:-7200000}
+      ORBIT_FETCH_TIMEOUT_MS: ${ORBIT_FETCH_TIMEOUT_MS:-30000}
+    restart: unless-stopped
