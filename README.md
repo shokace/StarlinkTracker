@@ -7,7 +7,7 @@ The project is now containerized, so the recommended way to run it locally is wi
 ## Features
 
 - Ingests current Starlink orbital data from CelesTrak GP JSON feeds
-- Falls back to TLE parsing when JSON is unavailable
+- Falls back to CelesTrak supplemental Starlink TLE data when the GP JSON feed is unavailable or rate-limited
 - Normalizes orbital records into MongoDB with derived metadata
 - Refreshes the catalog on startup and on a server schedule
 - Continuously refreshes live propagated altitude and position samples

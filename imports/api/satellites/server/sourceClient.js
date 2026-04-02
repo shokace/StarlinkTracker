@@ -2,8 +2,8 @@ import { parseTleFeed } from "/imports/lib/orbit/tle";
 
 const CELESTRAK_JSON_URL =
   "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=json";
-const CELESTRAK_TLE_URL =
-  "https://celestrak.org/NORAD/elements/gp.php?GROUP=starlink&FORMAT=tle";
+const CELESTRAK_SUPGP_TLE_URL =
+  "https://celestrak.org/NORAD/elements/supplemental/sup-gp.php?FILE=starlink&FORMAT=tle";
 
 function isTimeoutError(error) {
   return (
@@ -37,39 +37,63 @@ async function fetchWithTimeout(url, timeoutMs) {
 }
 
 export async function fetchCelesTrakStarlinkCatalog({ timeoutMs = 30000 } = {}) {
-  const [jsonResult, tleResult] = await Promise.allSettled([
-    fetchWithTimeout(CELESTRAK_JSON_URL, timeoutMs).then((response) => response.json()),
-    fetchWithTimeout(CELESTRAK_TLE_URL, timeoutMs)
-      .then((response) => response.text())
-      .then((tleText) => parseTleFeed(tleText)),
-  ]);
+  let jsonRecords = [];
+  let jsonError = null;
 
-  const jsonRecords = jsonResult.status === "fulfilled" && Array.isArray(jsonResult.value)
-    ? jsonResult.value
-    : [];
-  const tleRecords = tleResult.status === "fulfilled" ? tleResult.value : [];
-  const jsonError = jsonResult.status === "rejected" ? jsonResult.reason : null;
-  const tleError = tleResult.status === "rejected" ? tleResult.reason : null;
+  try {
+    const jsonResult = await fetchWithTimeout(CELESTRAK_JSON_URL, timeoutMs).then((response) =>
+      response.json(),
+    );
+    jsonRecords = Array.isArray(jsonResult) ? jsonResult : [];
+  } catch (error) {
+    jsonError = error;
+  }
+
+  if (jsonRecords.length) {
+    return {
+      format: "json",
+      jsonError,
+      tleError: null,
+      jsonRecords,
+      tleRecords: [],
+      source: {
+        provider: "CelesTrak",
+        group: "starlink",
+        jsonUrl: CELESTRAK_JSON_URL,
+        tleUrl: CELESTRAK_SUPGP_TLE_URL,
+      },
+    };
+  }
+
+  let tleRecords = [];
+  let tleError = null;
+
+  try {
+    const tleText = await fetchWithTimeout(CELESTRAK_SUPGP_TLE_URL, timeoutMs).then((response) =>
+      response.text(),
+    );
+    tleRecords = parseTleFeed(tleText);
+  } catch (error) {
+    tleError = error;
+  }
 
   if (!jsonRecords.length && !tleRecords.length) {
     throw new Error(
-      `Unable to fetch Starlink catalog. JSON: ${formatFeedError(jsonError)}. TLE: ${formatFeedError(tleError)}.`,
+      `Unable to fetch Starlink catalog. JSON: ${formatFeedError(jsonError)}. Supplemental TLE: ${formatFeedError(tleError)}.`,
     );
   }
 
-  const format = jsonRecords.length ? "json" : "tle";
-
   return {
-    format,
+    format: "tle",
     jsonError,
     tleError,
-    jsonRecords: Array.isArray(jsonRecords) ? jsonRecords : [],
+    jsonRecords,
     tleRecords,
     source: {
-      provider: "CelesTrak",
+      provider: "CelesTrak Supplemental GP",
       group: "starlink",
       jsonUrl: CELESTRAK_JSON_URL,
-      tleUrl: CELESTRAK_TLE_URL,
+      tleUrl: CELESTRAK_SUPGP_TLE_URL,
     },
   };
 }
