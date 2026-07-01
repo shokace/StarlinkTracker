@@ -118,8 +118,7 @@ select:focus {
   justify-content: flex-end;
 }
 
-.header-pill,
-.status-pill {
+.header-pill {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
@@ -130,20 +129,6 @@ select:focus {
   background: rgba(6, 12, 25, 0.9);
 }
 
-.status-pill--ok {
-  color: var(--success);
-}
-
-.status-pill--error {
-  color: var(--danger);
-}
-
-.status-pill--warn {
-  color: var(--warning);
-}
-
-.refresh-button,
-.ghost-button,
 .favorite-button {
   color: #021018;
   background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
@@ -151,26 +136,15 @@ select:focus {
   transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
 }
 
-.refresh-button:hover,
-.ghost-button:hover,
 .favorite-button:hover {
   transform: translateY(-1px);
   box-shadow: 0 16px 36px rgba(77, 210, 255, 0.3);
 }
 
-.refresh-button:disabled,
-.ghost-button:disabled,
 .favorite-button:disabled {
   cursor: wait;
   opacity: 0.65;
   transform: none;
-}
-
-.ghost-button {
-  background: transparent;
-  color: var(--text);
-  border: 1px solid var(--border);
-  box-shadow: none;
 }
 
 .favorite-button--active {
@@ -575,35 +549,6 @@ select:focus {
   background: rgba(5, 11, 22, 0.65);
 }
 
-.status-bar {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 0.8rem;
-  padding: 0 1rem 1rem;
-}
-
-.status-tile {
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: rgba(5, 9, 18, 0.82);
-}
-
-.status-tile__label {
-  display: block;
-  color: var(--muted);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.status-tile__value {
-  display: block;
-  margin-top: 0.3rem;
-  font-size: 1.05rem;
-  font-weight: 600;
-}
-
 .helper-text {
   color: var(--muted);
   font-size: 0.82rem;
@@ -621,10 +566,6 @@ select:focus {
 
   .details-panel {
     grid-column: 1 / -1;
-  }
-
-  .status-bar {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -658,8 +599,7 @@ select:focus {
 
   .field-grid--two,
   .summary-grid,
-  .details-grid,
-  .status-bar {
+  .details-grid {
     grid-template-columns: 1fr;
   }
 }

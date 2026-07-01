@@ -1,5 +1,4 @@
 export const DEFAULT_MAX_VISIBLE = null;
-export const MAX_VISIBLE_HARD_LIMIT = null;
 export const DEFAULT_ALTITUDE_MIN_KM = 300;
 export const DEFAULT_ALTITUDE_MAX_KM = 700;
 export const STATUS_DOC_ID = "starlink-feed";

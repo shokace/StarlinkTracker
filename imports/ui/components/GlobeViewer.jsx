@@ -4,80 +4,20 @@ import {
   GLOBE_ANIMATION_FPS,
 } from "/imports/api/satellites/constants";
 import { ForecastControls } from "/imports/ui/components/ForecastControls";
+import {
+  applyDefaultCameraView,
+  getApproximateUserCartesian,
+  isAboveUserHorizon,
+  toCartesian,
+  updateAtmosphereForZoom,
+} from "/imports/ui/lib/globeGeometry";
 
-function toCartesian(position, altitudeOffsetKm = 0) {
-  return Cesium.Cartesian3.fromDegrees(
-    position.longitudeDeg,
-    position.latitudeDeg,
-    (position.altitudeKm + altitudeOffsetKm) * 1000,
-  );
-}
-
-function getApproximateUserCartesian(position, altitudeOffsetKm = 0) {
-  return Cesium.Cartesian3.fromDegrees(
-    position.longitudeDeg,
-    position.latitudeDeg,
-    altitudeOffsetKm * 1000,
-  );
-}
-
-function isAboveUserHorizon(userCartesian, satelliteCartesian, minimumElevationDeg = 40) {
-  const surfaceNormal = Cesium.Cartesian3.normalize(
-    userCartesian,
-    new Cesium.Cartesian3(),
-  );
-  const userToSatellite = Cesium.Cartesian3.subtract(
-    satelliteCartesian,
-    userCartesian,
-    new Cesium.Cartesian3(),
-  );
-  const normalizedLineOfSight = Cesium.Cartesian3.normalize(
-    userToSatellite,
-    new Cesium.Cartesian3(),
-  );
-  const minimumDot = Math.sin(Cesium.Math.toRadians(minimumElevationDeg));
-
-  return Cesium.Cartesian3.dot(normalizedLineOfSight, surfaceNormal) >= minimumDot;
-}
-
-function applyDefaultCameraView(viewer) {
-  if (!viewer || viewer.isDestroyed()) {
-    return;
-  }
-
-  viewer.camera.frustum.fov = Cesium.Math.toRadians(50);
-  viewer.camera.setView({
-    destination: Cesium.Cartesian3.fromDegrees(8, 18, 12000000),
-    orientation: {
-      heading: 0,
-      pitch: -Cesium.Math.PI_OVER_TWO,
-      roll: 0,
-    },
-  });
-}
-
-function updateAtmosphereForZoom(viewer) {
-  if (!viewer || viewer.isDestroyed()) {
-    return;
-  }
-
-  const cameraHeight = viewer.camera.positionCartographic?.height ?? 12000000;
-  const fade = Cesium.Math.clamp((cameraHeight - 9000000) / 18000000, 0, 1);
-
-  viewer.scene.globe.atmosphereHueShift = 0.0;
-  viewer.scene.globe.atmosphereSaturationShift = -1.0;
-  viewer.scene.globe.atmosphereBrightnessShift = Cesium.Math.lerp(-0.18, -0.3, fade);
-
-  if (viewer.scene.skyAtmosphere) {
-    viewer.scene.skyAtmosphere.hueShift = 0.0;
-    viewer.scene.skyAtmosphere.saturationShift = -1.0;
-    viewer.scene.skyAtmosphere.brightnessShift = Cesium.Math.lerp(-0.24, -0.38, fade);
-  }
-
-  viewer.scene.fog.enabled = true;
-  viewer.scene.fog.density = Cesium.Math.lerp(0.00004, 0.000008, fade);
-  viewer.scene.fog.minimumBrightness = Cesium.Math.lerp(0.16, 0.1, fade);
-}
+// Shared, immutable primitives — allocated once instead of per satellite per
+// frame. Cesium copies colors by value on assignment, so sharing is safe.
+const SATELLITE_COLOR = Cesium.Color.fromCssColorString("#00a2ff");
+const SATELLITE_OUTLINE_COLOR = Cesium.Color.fromCssColorString("#7fd8ff");
+const ORBIT_PATH_COLOR = Cesium.Color.fromCssColorString("#ffd166");
+const VISIBILITY_LINE_MATERIAL = Cesium.Color.fromCssColorString("#ffffff").withAlpha(0.72);
 
 export function GlobeViewer({
   satellites,
@@ -387,8 +327,8 @@ export function GlobeViewer({
             name: satellite.name,
           },
           pixelSize: 1,
-          color: Cesium.Color.fromCssColorString("#00a2ff"),
-          outlineColor: Cesium.Color.fromCssColorString("#7fd8ff"),
+          color: SATELLITE_COLOR,
+          outlineColor: SATELLITE_OUTLINE_COLOR,
           outlineWidth: 0.5,
           position: initialPosition,
         });
@@ -423,11 +363,6 @@ export function GlobeViewer({
         pointState.transitionStartMs = updatedAtMs;
         point.position = pointState.current;
       }
-
-      point.color = Cesium.Color.fromCssColorString("#00a2ff");
-      point.outlineColor = Cesium.Color.fromCssColorString("#7fd8ff");
-      point.outlineWidth = 0.5;
-      point.pixelSize = 1;
     });
 
     viewer.scene.requestRender();
@@ -470,7 +405,7 @@ export function GlobeViewer({
           positions: selectedOrbitPath.map(toCartesian),
           width: 2,
           material: new Cesium.PolylineGlowMaterialProperty({
-            color: Cesium.Color.fromCssColorString("#ffd166"),
+            color: ORBIT_PATH_COLOR,
             glowPower: 0.22,
           }),
         },
@@ -551,7 +486,7 @@ export function GlobeViewer({
               return [latestUserCartesian, pointState.current];
             }, false),
             width: 1.5,
-            material: Cesium.Color.fromCssColorString("#ffffff").withAlpha(0.72),
+            material: VISIBILITY_LINE_MATERIAL,
           },
         });
         lineMap.set(satellite.noradId, entity);

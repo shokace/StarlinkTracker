@@ -27,7 +27,7 @@ export function parseTleFeed(text = "") {
   return records;
 }
 
-export function parseTleEpoch(tleLine1) {
+function parseTleEpoch(tleLine1) {
   if (!tleLine1 || tleLine1.length < 32) {
     return null;
   }

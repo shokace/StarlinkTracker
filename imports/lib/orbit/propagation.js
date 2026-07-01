@@ -14,11 +14,16 @@ import {
 const satrecCache = new Map();
 
 function getCacheKey(record) {
+  // Key on orbital identity (element set), not ingest timestamp. Keying on
+  // updatedAt made every record miss the cache after each catalog refresh,
+  // growing the Map by ~N entries every refresh. TLE lines and the OMM epoch
+  // fully determine the satrec, so an unchanged element set reuses its entry
+  // while a genuinely updated satellite still rebuilds.
   return [
-    record._id || record.noradId || "unknown",
-    record.updatedAt instanceof Date ? record.updatedAt.getTime() : record.epoch?.getTime?.() || 0,
+    record.noradId ?? record._id ?? "unknown",
     record.tleLine1 || "",
     record.tleLine2 || "",
+    record.omm?.EPOCH || "",
   ].join(":");
 }
 

@@ -1,9 +1,9 @@
 import { formatCountdownLabel } from "/imports/ui/lib/formatters";
-import { useCurrentTime } from "/imports/ui/hooks/useCurrentTime";
 
+// Re-renders every second through its parent (DashboardPage ticks on a 1s
+// timer), so the "Next sync" countdown stays live without a redundant local
+// interval of its own.
 export function AppHeader({ status }) {
-  useCurrentTime(1000);
-
   return (
     <header className="app-header">
       <div className="brand">

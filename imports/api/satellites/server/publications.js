@@ -2,6 +2,7 @@ import { Meteor } from "meteor/meteor";
 import {
   SATELLITE_DETAIL_FIELDS,
   SATELLITE_PUBLIC_FIELDS,
+  SATELLITE_SORT,
   SatellitesCollection,
 } from "/imports/api/satellites/satellites";
 import { sanitizeFilters, validateNoradId } from "/imports/api/satellites/validation";
@@ -53,10 +54,7 @@ Meteor.publish("satellites.filtered", function publishSatellitesFiltered(rawFilt
   return SatellitesCollection.find(query, {
     fields: SATELLITE_PUBLIC_FIELDS,
     ...(Number.isFinite(filters.maxVisible) ? { limit: filters.maxVisible } : {}),
-    sort: {
-      "orbit.currentAltitudeKm": 1,
-      noradId: 1,
-    },
+    sort: SATELLITE_SORT,
   });
 });
 
@@ -76,9 +74,6 @@ Meteor.publish("satellites.filteredCount", function publishSatellitesFilteredCou
       if (!initializing) {
         publication.changed("satelliteCounts", publicationId, {
           matchingCount,
-          displayedCount: Number.isFinite(filters.maxVisible)
-            ? Math.min(matchingCount, filters.maxVisible)
-            : matchingCount,
         });
       }
     },
@@ -86,9 +81,6 @@ Meteor.publish("satellites.filteredCount", function publishSatellitesFilteredCou
       matchingCount = Math.max(0, matchingCount - 1);
       publication.changed("satelliteCounts", publicationId, {
         matchingCount,
-        displayedCount: Number.isFinite(filters.maxVisible)
-          ? Math.min(matchingCount, filters.maxVisible)
-          : matchingCount,
       });
     },
   });
@@ -97,9 +89,6 @@ Meteor.publish("satellites.filteredCount", function publishSatellitesFilteredCou
 
   publication.added("satelliteCounts", publicationId, {
     matchingCount,
-    displayedCount: Number.isFinite(filters.maxVisible)
-      ? Math.min(matchingCount, filters.maxVisible)
-      : matchingCount,
   });
   publication.ready();
 

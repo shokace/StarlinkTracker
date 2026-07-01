@@ -1,6 +1,6 @@
 import { Meteor } from "meteor/meteor";
 import { useTracker } from "meteor/react-meteor-data";
-import { startTransition, useDeferredValue, useEffect, useState } from "react";
+import { startTransition, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   CLIENT_PROPAGATION_INTERVAL_MS,
   DEFAULT_ALTITUDE_MAX_KM,
@@ -13,7 +13,7 @@ import {
   SELECTED_ORBIT_PATH_STEP_SECONDS,
 } from "/imports/api/satellites/constants";
 import { SatelliteCountsCollection } from "/imports/api/satellites/satelliteCounts";
-import { SatellitesCollection } from "/imports/api/satellites/satellites";
+import { SATELLITE_SORT, SatellitesCollection } from "/imports/api/satellites/satellites";
 import { StatusCollection } from "/imports/api/status/status";
 import { computeSatelliteState, sampleOrbitPath } from "/imports/lib/orbit/propagation";
 import { AppHeader } from "/imports/ui/components/AppHeader";
@@ -34,6 +34,15 @@ const initialFilters = {
   altitudeMaxKm: DEFAULT_ALTITUDE_MAX_KM,
   favoritesOnly: false,
   maxVisible: DEFAULT_MAX_VISIBLE,
+};
+
+// Live mode / forecast-closed reset. Never mutated, so a shared constant is safe
+// (setForecastState always replaces the state wholesale).
+const CLOSED_FORECAST_STATE = {
+  isOpen: false,
+  isPlaying: false,
+  offsetMs: 0,
+  anchorTime: null,
 };
 
 function matchesLocalFilter(satellite, filters, favoriteNoradIds) {
@@ -83,10 +92,7 @@ function useDashboardData(filters, selectedNoradId) {
     const satellites = SatellitesCollection.find(
       {},
       {
-        sort: {
-          "orbit.currentAltitudeKm": 1,
-          noradId: 1,
-        },
+        sort: SATELLITE_SORT,
       },
     )
       .fetch()
@@ -123,12 +129,7 @@ function useDashboardData(filters, selectedNoradId) {
 export function DashboardPage() {
   const [filters, setFilters] = useState(initialFilters);
   const [selectedNoradId, setSelectedNoradId] = useState(null);
-  const [forecastState, setForecastState] = useState({
-    isOpen: false,
-    isPlaying: false,
-    offsetMs: 0,
-    anchorTime: null,
-  });
+  const [forecastState, setForecastState] = useState(CLOSED_FORECAST_STATE);
   const deferredSearchText = useDeferredValue(filters.searchText);
   const currentTime = useCurrentTime(CLIENT_PROPAGATION_INTERVAL_MS);
   const approximateLocation = useApproximateLocation();
@@ -146,15 +147,19 @@ export function DashboardPage() {
     forecastState.isOpen && forecastState.isPlaying
       ? FORECAST_PLAYBACK_TICK_MS
       : CLIENT_PROPAGATION_INTERVAL_MS;
-  const positionsByNoradId = new Map();
+  const positionsByNoradId = useMemo(() => {
+    const nextPositions = new Map();
 
-  satellites.forEach((satellite) => {
-    const propagatedState = computeSatelliteState(satellite, displayTime) || satellite.liveSample;
+    satellites.forEach((satellite) => {
+      const propagatedState = computeSatelliteState(satellite, displayTime) || satellite.liveSample;
 
-    if (propagatedState) {
-      positionsByNoradId.set(satellite.noradId, propagatedState);
-    }
-  });
+      if (propagatedState) {
+        nextPositions.set(satellite.noradId, propagatedState);
+      }
+    });
+
+    return nextPositions;
+  }, [satellites, displayTime]);
 
   const selectedLiveState = selectedSatellite
     ? positionsByNoradId.get(selectedSatellite.noradId) ||
@@ -162,13 +167,17 @@ export function DashboardPage() {
       selectedSatellite.liveSample
     : null;
   const selectedDisplayState = selectedNoradId ? positionsByNoradId.get(selectedNoradId) : null;
-  const selectedOrbitPath = selectedSatellite
-    ? sampleOrbitPath(selectedSatellite, {
-        startDate: displayTime,
-        sampleCount: SELECTED_ORBIT_PATH_SAMPLE_COUNT,
-        stepSeconds: SELECTED_ORBIT_PATH_STEP_SECONDS,
-      })
-    : [];
+  const selectedOrbitPath = useMemo(
+    () =>
+      selectedSatellite
+        ? sampleOrbitPath(selectedSatellite, {
+            startDate: displayTime,
+            sampleCount: SELECTED_ORBIT_PATH_SAMPLE_COUNT,
+            stepSeconds: SELECTED_ORBIT_PATH_STEP_SECONDS,
+          })
+        : [],
+    [selectedSatellite, displayTime],
+  );
 
   useEffect(() => {
     if (selectedNoradId && !selectedSatellite && !loading) {
@@ -191,12 +200,7 @@ export function DashboardPage() {
           currentForecastState.offsetMs + FORECAST_PLAYBACK_TICK_MS * FORECAST_PLAYBACK_RATE;
 
         if (nextOffsetMs >= FORECAST_HORIZON_MS) {
-          return {
-            isOpen: false,
-            isPlaying: false,
-            offsetMs: 0,
-            anchorTime: null,
-          };
+          return CLOSED_FORECAST_STATE;
         }
 
         return {
@@ -246,12 +250,7 @@ export function DashboardPage() {
   }
 
   function handleReturnLiveMode() {
-    setForecastState({
-      isOpen: false,
-      isPlaying: false,
-      offsetMs: 0,
-      anchorTime: null,
-    });
+    setForecastState(CLOSED_FORECAST_STATE);
   }
 
   function handleToggleForecastPlayback() {

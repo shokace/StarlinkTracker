@@ -3,14 +3,15 @@ import "/imports/api/satellites/server/publications";
 import "/imports/api/satellites/server/methods";
 import "/imports/api/status/server/publications";
 import {
-  CELESTRAK_MIN_REFRESH_INTERVAL_MS,
-  DEFAULT_REFRESH_INTERVAL_MS,
   LIVE_SAMPLE_REFRESH_INTERVAL_MS,
   STATUS_DOC_ID,
 } from "/imports/api/satellites/constants";
 import { refreshSatelliteLiveSamples } from "/imports/api/satellites/server/liveSamples";
 import { SatellitesCollection } from "/imports/api/satellites/satellites";
-import { refreshStarlinkCatalog } from "/imports/api/satellites/server/ingest";
+import {
+  getRefreshIntervalMs,
+  refreshStarlinkCatalog,
+} from "/imports/api/satellites/server/ingest";
 import { StatusCollection } from "/imports/api/status/status";
 
 async function ensureIndexes() {
@@ -46,11 +47,7 @@ Meteor.startup(async () => {
     });
   });
 
-  const configuredRefreshIntervalMs = Number(process.env.ORBIT_REFRESH_INTERVAL_MS);
-  const refreshIntervalMs =
-    Number.isFinite(configuredRefreshIntervalMs) && configuredRefreshIntervalMs > 0
-      ? Math.max(configuredRefreshIntervalMs, CELESTRAK_MIN_REFRESH_INTERVAL_MS)
-      : DEFAULT_REFRESH_INTERVAL_MS;
+  const refreshIntervalMs = getRefreshIntervalMs();
 
   Meteor.setInterval(() => {
     refreshStarlinkCatalog({ trigger: "scheduled" }).catch((error) => {

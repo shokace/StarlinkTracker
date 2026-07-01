@@ -3,7 +3,6 @@ import {
   DEFAULT_ALTITUDE_MAX_KM,
   DEFAULT_ALTITUDE_MIN_KM,
   DEFAULT_MAX_VISIBLE,
-  MAX_VISIBLE_HARD_LIMIT,
 } from "/imports/api/satellites/constants";
 
 function clamp(value, minimum, maximum) {
@@ -50,11 +49,7 @@ export function sanitizeFilters(rawFilters = {}) {
     rawFilters.maxVisible === null || rawFilters.maxVisible === undefined
       ? DEFAULT_MAX_VISIBLE
       : rawFilters.maxVisible;
-  const maxVisible = Number.isFinite(rawMaxVisible)
-    ? MAX_VISIBLE_HARD_LIMIT
-      ? clamp(rawMaxVisible, 25, MAX_VISIBLE_HARD_LIMIT)
-      : Math.max(25, rawMaxVisible)
-    : null;
+  const maxVisible = Number.isFinite(rawMaxVisible) ? Math.max(25, rawMaxVisible) : null;
 
   return {
     searchText,

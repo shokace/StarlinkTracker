@@ -22,7 +22,7 @@ function logError(message, error) {
   console.error(`[starlink] ${message}`, error);
 }
 
-function getRefreshIntervalMs() {
+export function getRefreshIntervalMs() {
   const configuredInterval = Number(process.env.ORBIT_REFRESH_INTERVAL_MS);
 
   return Number.isFinite(configuredInterval) && configuredInterval > 0
@@ -223,6 +223,9 @@ export async function refreshStarlinkCatalog({ trigger = "manual" } = {}) {
           const warningMessage = blocked
             ? `CelesTrak returned 403 Forbidden. Using cached orbital data until ${blockedUntil.toLocaleString()}.`
             : "Feed timed out, continuing to use cached orbital data.";
+          const nextRefreshAt =
+            blockedUntil ||
+            (refreshIntervalMs ? new Date(failedAt.getTime() + refreshIntervalMs) : null);
 
           await updateStatus({
             totalSatellites: existingCount,
@@ -232,8 +235,7 @@ export async function refreshStarlinkCatalog({ trigger = "manual" } = {}) {
             lastError: null,
             lastWarning: warningMessage,
             refreshBlockedUntil: blockedUntil,
-            nextRefreshAt: blockedUntil ||
-              (refreshIntervalMs ? new Date(failedAt.getTime() + refreshIntervalMs) : null),
+            nextRefreshAt,
           });
 
           logError(
@@ -249,8 +251,7 @@ export async function refreshStarlinkCatalog({ trigger = "manual" } = {}) {
             stale: true,
             format: "cached",
             blocked,
-            nextRefreshAt: blockedUntil ||
-              (refreshIntervalMs ? new Date(failedAt.getTime() + refreshIntervalMs) : null),
+            nextRefreshAt,
             message: warningMessage,
           };
         }
